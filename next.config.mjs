@@ -1,8 +1,6 @@
-{
-  "name": "revende",
-  "compatibility_date": "2026-10-01",
-  "assets": {
-    "directory": "./out",
-    "not_found_handling": "404-page"
-  }
-}
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  reactStrictMode: true,
+  output: 'export',
+};
+export default nextConfig;
