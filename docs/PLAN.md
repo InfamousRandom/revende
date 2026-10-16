@@ -56,7 +56,7 @@ Preparación:
 - [x] **(Pablo)** Crear base D1 `revende-db` en Cloudflare y pasar su ID
       (alternativa: `npx wrangler d1 create revende-db`).
 - [x] Binding `DB` en `wrangler.jsonc` y carpeta `migrations/` (`0001_historial.sql`).
-- [ ] **(Pablo)** Que el deploy aplique las migraciones: en Cloudflare → Workers → revende →
+- [x] **(Pablo)** Que el deploy aplique las migraciones: en Cloudflare → Workers → revende →
       Settings → Build → Deploy command, cambiar `npx wrangler deploy` por
       `npx wrangler d1 migrations apply revende-db --remote && npx wrangler deploy`.
       Sin esto, la base de producción queda sin tablas. Hacerlo antes del primer push de la Fase 3.

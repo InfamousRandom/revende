@@ -21,6 +21,12 @@ Plan por fases y tareas: `docs/PLAN.md`. Léelo antes de empezar cualquier tarea
   - `GET /api/cuota`: búsquedas restantes de SerpApi (consultar la cuenta no gasta búsquedas).
   - App: dos pantallas (Buscar, Calcular); foto con cámara dentro de la app (`CamaraFoto`) o galería.
   - `POST /api/identificar` + `GET /api/img/:id.jpg` (Google Lens; foto temporal en Durable Object).
+- Fase 3 en producción (2026-10-16): historial en D1 (`DB`, base `revende-db`), código en
+  `worker/historial.js` y `worker/csv.js`; app en `app/Historial.js`, `TusVentas.js`,
+  `CapturaUsado.js`, `Respaldo.js`. El deploy de Cloudflare corre
+  `npx wrangler d1 migrations apply revende-db --remote && npx wrangler deploy`.
+  Local: `npx wrangler d1 migrations apply revende-db --local` y probar con
+  `npx wrangler dev --var REVENDE_CLAVE:prueba-local`. No escribir datos de prueba en producción.
 - Repo: github.com/InfamousRandom/revende (rama `main`).
 
 ## Stack
