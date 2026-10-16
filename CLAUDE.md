@@ -51,7 +51,7 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 
 | Nombre | Uso | Estado |
 | --- | --- | --- |
-| `REVENDE_CLAVE` | Ya no se usa (se quitó la clave de acceso, 2026-10-16) | Configurado, se puede borrar |
+| `REVENDE_CLAVE` | Protege solo las rutas del historial (D1, Fase 3) vía encabezado `x-revende-clave` | Configurado |
 | `GEMINI_API_KEY` | Gemini (ruta inactiva) | Configurado |
 | `SERPAPI_KEY` | Google Shopping y Google Lens vía SerpApi | Configurado |
 
@@ -61,33 +61,49 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
   estructurados. Plan gratuito: 250 búsquedas al mes (la cuenta reporta 250 por hora como límite). Más exacto que pedirle precios
   a un LLM.
 - **Identificar por foto:** SerpApi, motor Google Lens (`country=mx`). Necesita la imagen en una
-  URL pública: el Worker la guarda unos minutos en KV y la sirve en una ruta temporal.
+  URL pública: el Worker la guarda unos minutos en un Durable Object (`FotoTemporal`) y la sirve
+  en una ruta temporal (`/api/img/:id.jpg`).
 - **Gemini con búsqueda:** pausado. Requiere $5 USD de prepago. Opción futura, no principal.
 - **API de Mercado Libre:** no usar. La búsqueda pública devuelve 403 desde 2024.
 - **Facebook Marketplace:** nada automatizado (viola términos). Precios de usado por captura
   manual rápida dentro de la app.
-- **Datos del usuario (registro, capturas):** primero en el celular (IndexedDB), con exportar e
-  importar respaldo en JSON. Sincronizar a Cloudflare D1 solo si hace falta después.
+- **Datos del usuario (historial de ventas, capturas de usado):** en Cloudflare D1 desde el inicio
+  (binding `DB`, migraciones de Wrangler en `migrations/`). Es el dato más valioso de la app y el
+  navegador puede borrar lo guardado localmente (sobre todo en iPhone) o se pierde al cambiar de
+  celular. Acceso solo vía Worker con `REVENDE_CLAVE`.
+- **Catálogo de productos:** cada operación se liga a un producto de un catálogo (categoría, marca,
+  modelo, variante, código de barras) elegido con autocompletado, para agrupar ventas del mismo
+  artículo aunque se escriba distinto.
 - **Plataforma única:** todo en Cloudflare (Workers, KV, D1). No agregar Vercel ni Supabase.
 
 ## Reglas
 
 - Ninguna llave en el frontend ni en el repo. Toda llamada a servicios externos pasa por el Worker.
-- Sin clave de acceso ni pantalla de Ajustes (decisión de Pablo, 2026-10-16: era impráctico).
-  Las rutas que gastan cuota (`/api/precios`, `/api/identificar`, `/api/cuota`, `/api/analizar`)
-  solo aceptan llamadas desde la propia app (`Origin` o `Sec-Fetch-Site: same-origin`). Es una
-  protección ligera, no segura contra quien falsifique encabezados. `/api/img/:id.jpg` es pública
-  a propósito (Google la descarga). Para probar con curl: `-H "Origin: http://localhost:8787"`.
+- Sin pantalla de Ajustes (decisión de Pablo, 2026-10-16: era impráctico).
+  - Precios y foto (`/api/precios`, `/api/identificar`, `/api/cuota`, `/api/analizar`) no piden
+    clave: solo aceptan llamadas desde la propia app (`Origin` o `Sec-Fetch-Site: same-origin`).
+    Protección ligera, no segura contra quien falsifique encabezados. Para probar con curl:
+    `-H "Origin: http://localhost:8787"`. `/api/img/:id.jpg` es pública a propósito (Google la descarga).
+  - Historial (rutas de D1, Fase 3) sí exige `x-revende-clave` igual a `REVENDE_CLAVE`, porque son
+    datos de Pablo. La app pide la clave una sola vez, en una ventanita la primera vez que se abre el
+    historial, y la recuerda en el celular.
 - Cuidar la cuota de SerpApi: cachear resultados en KV por consulta normalizada (24 h) y no
   repetir búsquedas automáticas. Nunca disparar búsquedas al escribir; solo al confirmar.
 - Nunca mostrar un precio sin su fuente (tienda + link). Nunca inventar ni estimar precios.
-- Pablo vende en persona o por Marketplace: no hay comisiones ni canales de venta. No volver a agregarlos.
+- Pablo vende en persona o por Marketplace: no hay comisiones; no volver a agregarlas (ni en la
+  calculadora ni en el historial). El historial sí guarda el canal donde se vendió (en persona,
+  Marketplace, otro) solo para comparar.
 - Resultados sin ocultar (decisión de Pablo, 2026-10-16): mostrar todos los resultados de Google
   Shopping de todas las tiendas, separados en nuevos y usados/reacondicionados. Lo que parece
   accesorio, paquete o precio fuera de lo normal se muestra marcado en gris, al final, y no cuenta
   para el rango (mediana, mín, máx). Nunca quitar resultados de la lista.
+- Registrar una compra o venta debe tomar menos de 30 segundos: autocompletar producto, valores
+  por defecto, y obligatorio solo producto, precio y fecha.
 - Móvil primero: botones grandes, una mano, legible al sol, modo claro y oscuro.
 - Mantener el lenguaje visual actual (etiqueta amarilla, tipografías, variables de color).
 - Cambios pequeños y probados con `npx wrangler dev` antes de hacer commit. Preguntar antes de
   hacer `git push`, porque cada push publica a producción.
 - Textos de la interfaz en español de México, sin tecnicismos.
+- Orden de trabajo: Fase 2A (precios) → Fase 3 (historial en D1) → Fase 4 (foto) → Fase 5 (checklist).
+  La identificación por foto con Lens ya está en producción; de la Fase 4 queda lo que depende del
+  catálogo de la Fase 3.

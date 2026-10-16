@@ -46,7 +46,63 @@ mejores ofertas, sin salir a otras páginas.
 Terminado cuando: "PS5 Slim digital" muestra en menos de 5 s un rango coherente y ofertas con
 tienda y link, sin accesorios; una segunda búsqueda igual sale de cache.
 
-## Fase 2B: identificar por foto (SerpApi + Google Lens)
+## Fase 3: historial de ventas (Cloudflare D1)
+
+Objetivo: tener referencias de lo que ya vendí para saber en cuánto puedo dar un artículo, y
+estimar precios de artículos que nunca he vendido a partir de mi historial por categoría.
+
+Preparación:
+
+- [ ] **(Pablo)** Crear base D1 `revende-db` en Cloudflare y pasar su ID
+      (alternativa: `npx wrangler d1 create revende-db`).
+- [ ] Binding `DB` en `wrangler.jsonc` y carpeta `migrations/`.
+
+Esquema inicial (ajustable):
+
+- `productos`: id, nombre, categoria, marca, modelo, variante, codigo_barras (único, opcional), creado_en.
+- `operaciones`: id, producto_id, condicion (sellado | como_nuevo | usado_bueno | con_detalles),
+  precio_compra, fecha_compra, lugar_compra, precio_publicado, fecha_publicado, precio_venta,
+  fecha_venta, canal (en_persona | marketplace | otro), envio_mxn, otros_gastos_mxn,
+  precio_nuevo_ref (precio nuevo de SerpApi al momento de vender), notas, creado_en, actualizado_en.
+  Estado derivado: en inventario (sin fecha_venta) o vendido. Sin comisión (ver `CLAUDE.md`).
+- `capturas_usado`: id, producto_id, fuente (marketplace | ml_usado | otro), precio, condicion,
+  url opcional, fecha.
+- Montos en pesos como enteros; fechas ISO.
+
+API (todas con `x-revende-clave`; precios y foto siguen sin clave):
+
+- [ ] `GET /api/productos?q=` (autocompletado por nombre, marca, modelo o código de barras) y
+      `POST /api/productos`.
+- [ ] `POST /api/operaciones` y `PATCH /api/operaciones/:id` (registrar compra y luego venta);
+      `GET /api/operaciones?estado=&producto_id=`.
+- [ ] `POST /api/capturas`.
+- [ ] `GET /api/referencias?producto_id=` o `?q=`: mis ventas de ese producto (precio, días para
+      vender, condición, canal, descuento vs publicado); mediana, mínimo y máximo de mis ventas y
+      capturas (últimos 12 meses); si no hay ventas del producto, factor de la categoría = mediana de
+      (precio_venta / precio_nuevo_ref) y estimación con el precio nuevo actual de la Fase 2A.
+- [ ] `GET /api/exportar` (CSV) y `POST /api/importar` (CSV de ventas pasadas).
+
+Pantallas:
+
+- [ ] Registrar compra y venta en menos de 30 s, con autocompletado de producto o creación en el momento.
+- [ ] Al buscar un artículo: tarjeta "Tus ventas" arriba de los precios nuevos, con el contraste
+      precio contra rapidez (ej. "$7,200 en 3 días · $7,800 en 21 días").
+- [ ] La calculadora usa como precio de venta esperado la mediana de mis ventas, o la estimación por
+      categoría si no hay ventas, indicando de dónde salió el número.
+- [ ] Pantalla "Historial": búsqueda, filtros (categoría, vendido o en inventario), ganancia real,
+      margen, días promedio para vender y dinero parado en inventario.
+- [ ] Clave de acceso pedida una sola vez (ventanita al abrir el historial), guardada en el celular.
+- [ ] Captura rápida de precio de usado desde la tarjeta de resultados.
+- [ ] Exportar e importar CSV.
+
+Terminado cuando: registro una venta en menos de 30 s; al buscar ese producto veo mi venta con días
+para vender; y para un producto nuevo de una categoría con ventas veo una estimación por el factor
+de la categoría.
+
+## Fase 4: identificar por foto (SerpApi + Google Lens)
+
+La parte de Lens ya está en producción (se hizo antes como "Fase 2B"); falta lo que depende del
+catálogo de la Fase 3.
 
 - [x] Botón "Foto" que abre la cámara dentro de la app (`getUserMedia`, `app/CamaraFoto.js`), con "Galería"
       como alternativa. Se cambió porque en varios celulares `capture=environment` abría la galería.
@@ -67,28 +123,15 @@ tienda y link, sin accesorios; una segunda búsqueda igual sale de cache.
 - [x] Consejo visible: fotografiar etiqueta, caja o número de modelo.
 - [ ] **(Pablo)** Probar en producción con una foto real (en local Lens no puede ver la foto porque
       `localhost` no es público).
+- [ ] Al mostrar candidatos de la foto, incluir también productos de mi catálogo que coincidan.
+- [ ] Al confirmar un candidato, mostrar precios y mi historial de ese producto.
 - Notas: candidatos salen de `related_content` de Lens (nombres limpios) y de títulos de
   coincidencias; tocar un candidato llena el buscador y NO busca precios solo (cuida la cuota).
 
 Terminado cuando: una foto de la caja de un producto común da el nombre correcto entre los
-candidatos y lleva a sus precios con dos toques.
+candidatos y lleva a sus precios y mi historial con dos toques.
 
-## Fase 3: registro de operaciones, inventario y precios de usado
-
-Todo en el celular (IndexedDB), sin servidor.
-
-- [ ] Registrar compra: artículo, fecha, precio, canal donde piensa vender, notas.
-- [ ] Registrar venta: precio, fecha, dónde (en persona o Marketplace) y gastos reales.
-- [ ] Inventario: artículos sin vender, días en inventario, dinero invertido.
-- [ ] Resumen: ganancia real, margen real, días promedio para vender, por artículo y total.
-- [ ] Captura rápida de precio usado (Marketplace, ML usado, otro): precio, condición, fecha, link opcional.
-- [ ] En la tarjeta de resultados, mostrar el rango de usado con las capturas y ventas propias de ese artículo.
-- [ ] Exportar e importar respaldo JSON.
-
-Terminado cuando: se puede registrar una compra y su venta en menos de 30 s cada una y ver la
-ganancia real y los días que tardó.
-
-## Fase 4: checklist antes de comprar
+## Fase 5: checklist antes de comprar
 
 - [ ] Checklist por categoría como datos fijos en la app: celulares, consolas, laptops, tablets,
       audio, relojes, tenis y ropa.
@@ -96,14 +139,15 @@ ganancia real y los días que tardó.
       señales de réplica, accesorios originales.
 - [ ] Se muestra junto a los resultados según la categoría del artículo; se puede marcar cada punto.
 
-## Fase 5: opcional, solo si el uso lo justifica
+## Fase 6: opcional, solo si el uso lo justifica
 
-- [ ] Sincronizar el registro a Cloudflare D1 (respaldo y uso en varios dispositivos).
 - [ ] Gemini como segunda opinión para identificar o para checklist específico (requiere prepago).
 - [ ] Precios de usado de Mercado Libre vía scraper de pago (Apify) si la captura manual no basta.
 - [ ] Alertas de oportunidades: avisar cuando aparezca algo por debajo del precio máximo.
+- [ ] Fotos de cada artículo en el historial (evaluar costo).
 
 ## Decisiones pendientes
 
 - Umbral exacto para descartar accesorios: hoy < 35 % y > 200 % de la mediana; ajustar con casos reales.
 - Si conviene unificar `/api/analizar` (Gemini) con `/api/precios` o retirarlo más adelante.
+- Si el factor por categoría debe ajustarse por condición (sellado vs usado) cuando haya suficientes datos.
