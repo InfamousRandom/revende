@@ -729,3 +729,38 @@ body {
 .en-catalogo { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
 .en-catalogo .ident-subtitulo { margin: 0; }
 .candidato-catalogo { border-color: var(--tinta); background: var(--superficie); }
+
+/* ---------- Checklist antes de comprar ---------- */
+.checklist { margin-top: 12px; }
+.checklist summary { display: flex; flex-direction: column; gap: 2px; cursor: pointer; list-style: none; }
+.checklist summary::-webkit-details-marker { display: none; }
+.checklist-titulo { font-family: var(--display); font-weight: 700; font-size: 1.3rem; }
+.checklist-avance { font-size: 0.85rem; color: var(--tenue); }
+.checklist-avance em { font-style: normal; font-weight: 600; color: var(--pierde); }
+.checklist .chips { margin: 12px 0 4px; }
+.checklist-puntos { list-style: none; margin: 8px 0 0; padding: 0; }
+.checklist-punto {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  min-height: 48px;
+  padding: 10px 0;
+  border-top: 1px solid var(--linea);
+  cursor: pointer;
+}
+.checklist-puntos li:first-child .checklist-punto { border-top: 0; }
+.checklist-punto input { flex: none; width: 22px; height: 22px; margin: 1px 0 0; accent-color: var(--gana); }
+.checklist-punto.hecho span { color: var(--tenue); text-decoration: line-through; }
+.checklist-punto.fraude { padding-left: 8px; margin-left: -8px; border-left: 3px solid var(--pierde); }
+.etiqueta-fraude {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--pierde);
+  border-radius: 4px;
+  vertical-align: 1px;
+}

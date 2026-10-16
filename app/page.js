@@ -6,6 +6,7 @@ import Identificacion, { reducirImagen } from './Foto';
 import Historial from './Historial';
 import TusVentas from './TusVentas';
 import CapturaUsado from './CapturaUsado';
+import Checklist from './Checklist';
 import { api } from './historial-api';
 
 const CamaraFoto = dynamic(() => import('./CamaraFoto'), { ssr: false });
@@ -346,6 +347,9 @@ export default function Inicio() {
                   )}
                   {precios.consulta === q && (
                     <Precios key={precios.datos?.fecha || precios.fase} estado={precios} onUsar={usarReferencia} />
+                  )}
+                  {precios.consulta === q && precios.fase !== 'cargando' && (
+                    <Checklist key={q} texto={q} categoriaHistorial={refs.consulta === q ? refs.datos?.producto?.categoria : null} />
                   )}
                   {/^\d{8,14}$/.test(q) && (
                     <p className="pista">Es un código de barras: si no salen resultados, búscalo en Google Shopping para saber el modelo y escribe el nombre.</p>

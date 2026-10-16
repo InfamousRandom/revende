@@ -114,6 +114,8 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 - Cambios pequeños y probados con `npx wrangler dev` antes de hacer commit. Preguntar antes de
   hacer `git push`, porque cada push publica a producción.
 - Textos de la interfaz en español de México, sin tecnicismos.
+- Nunca dos archivos cuyo nombre solo cambie en mayúsculas (`Checklist.js` y `checklist.js`):
+  en Windows son el mismo archivo y uno borra al otro; Cloudflare compila en Linux, donde son distintos.
 - Orden de trabajo: Fase 2A (precios) → Fase 3 (historial en D1) → Fase 4 (foto) → Fase 5 (checklist).
   La identificación por foto con Lens ya está en producción; de la Fase 4 queda lo que depende del
   catálogo de la Fase 3.

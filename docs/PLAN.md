@@ -183,11 +183,14 @@ candidatos y lleva a sus precios y mi historial con dos toques.
 
 ## Fase 5: checklist antes de comprar
 
-- [ ] Checklist por categoría como datos fijos en la app: celulares, consolas, laptops, tablets,
-      audio, relojes, tenis y ropa.
-- [ ] Puntos antifraude: IMEI reportado, bloqueo de iCloud o cuenta Google, factura,
-      señales de réplica, accesorios originales.
-- [ ] Se muestra junto a los resultados según la categoría del artículo; se puede marcar cada punto.
+- [x] Checklist por categoría como datos fijos en la app: celulares, consolas, laptops, tablets,
+      audio, relojes, tenis y ropa (`app/checklist-datos.js`), más puntos generales.
+- [x] Puntos antifraude: IMEI reportado, bloqueo de iCloud o cuenta Google, factura,
+      señales de réplica, accesorios originales (marcados con `fraude: true`, en rojo).
+- [x] Se muestra junto a los resultados según la categoría del artículo; se puede marcar cada punto
+      (`app/Checklist.js`, debajo de los precios). Categoría: la de tu historial, si no por palabras
+      del nombre ("iPhone", "PS5", "Jordan"); se puede cambiar. Las marcas no se guardan: son por
+      revisión y se reinician al buscar otro artículo.
 
 ## Fase 6: opcional, solo si el uso lo justifica
 
