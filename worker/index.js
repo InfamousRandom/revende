@@ -1,4 +1,5 @@
 // Worker de Revende: sirve la app (archivos de ./out) y las rutas /api.
+import { DurableObject } from 'cloudflare:workers';
 const MODELO_DEFECTO = 'gemini-3-flash-preview';
 
 const instrucciones = (consulta) => `Eres un asistente para una persona que compra y revende articulos en Mexico.
@@ -291,9 +292,30 @@ async function precios(request, env) {
 // ---------- /api/identificar: nombre del articulo a partir de una foto (SerpApi + Google Lens) ----------
 
 const IMAGEN_SEGUNDOS = 10 * 60; // la foto vive maximo 10 minutos y se borra al terminar
-const IMAGEN_MAX_BYTES = 2 * 1024 * 1024;
+const IMAGEN_MAX_BYTES = 1.5 * 1024 * 1024; // el celular la manda reducida (~100-300 KB)
 const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
-const ID_IMAGEN = /^[a-f0-9]{32}$/;
+const ID_IMAGEN = /^([a-f0-9]{32})\.jpg$/;
+
+// Foto temporal en un Durable Object: a diferencia de KV, lo escrito se lee igual desde cualquier
+// region al instante (Google descarga la foto desde EE. UU.). Se borra sola a los 10 minutos.
+export class FotoTemporal extends DurableObject {
+  async guardar(bytes, tipo) {
+    await this.ctx.storage.put('foto', { bytes, tipo });
+    await this.ctx.storage.setAlarm(Date.now() + IMAGEN_SEGUNDOS * 1000);
+  }
+  async leer() {
+    return (await this.ctx.storage.get('foto')) || null;
+  }
+  async borrar() {
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+  }
+  async alarm() {
+    await this.ctx.storage.deleteAll();
+  }
+}
+
+const fotoTemporal = (env, id) => env.FOTOS.get(env.FOTOS.idFromName(id));
 
 // Quita el "relleno" tipico de los titulos de tienda: "... | MercadoLibre", "... : Amazon.com.mx: ...", "...".
 const limpiarTitulo = (t) =>
@@ -345,7 +367,7 @@ async function identificar(request, env) {
   const sinPermiso = verificarClave(request, env);
   if (sinPermiso) return sinPermiso;
   if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
-  if (!env.CACHE) return json({ ok: false, error: 'Falta configurar el almacenamiento temporal (KV)' }, 500);
+  if (!env.FOTOS) return json({ ok: false, error: 'Falta configurar el almacenamiento temporal de fotos' }, 500);
 
   const tipo = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
   if (!TIPOS_IMAGEN.includes(tipo)) return json({ ok: false, error: 'Manda una foto (JPG, PNG o WebP)' }, 415);
@@ -355,13 +377,13 @@ async function identificar(request, env) {
 
   // Lens necesita la foto en una URL publica: se guarda unos minutos con un ID imposible de adivinar.
   const id = crypto.randomUUID().replace(/-/g, '');
-  const claveImagen = `img:${id}`;
-  await env.CACHE.put(claveImagen, imagen, { expirationTtl: IMAGEN_SEGUNDOS, metadata: { tipo } });
-  const urlImagen = `${new URL(request.url).origin}/api/img/${id}`;
+  const foto = fotoTemporal(env, id);
+  await foto.guardar(imagen, tipo);
+  const urlImagen = `${new URL(request.url).origin}/api/img/${id}.jpg`;
 
   try {
     let { status, datos } = await buscarLens(urlImagen, env);
-    // Si Lens no pudo descargar la foto (puede tardar en propagarse), un reintento.
+    // Si Lens no pudo descargar la foto, un reintento.
     if (/url|image|fetch|download/i.test(String(datos.error || ''))) {
       await new Promise((listo) => setTimeout(listo, 1500));
       ({ status, datos } = await buscarLens(urlImagen, env));
@@ -375,17 +397,18 @@ async function identificar(request, env) {
     }
     return json({ ok: true, candidatos, precios: preciosDeLens(datos) });
   } finally {
-    await env.CACHE.delete(claveImagen);
+    await foto.borrar();
   }
 }
 
 // Ruta publica temporal para que Google Lens descargue la foto. Solo IDs validos y vigentes.
-async function servirImagen(id, env) {
-  if (!ID_IMAGEN.test(id) || !env.CACHE) return new Response('No encontrada', { status: 404 });
-  const { value, metadata } = await env.CACHE.getWithMetadata(`img:${id}`, 'arrayBuffer');
-  if (!value) return new Response('No encontrada', { status: 404 });
-  return new Response(value, {
-    headers: { 'content-type': metadata?.tipo || 'image/jpeg', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' },
+async function servirImagen(nombre, env) {
+  const id = ID_IMAGEN.exec(nombre)?.[1];
+  if (!id || !env.FOTOS) return new Response('No encontrada', { status: 404 });
+  const guardada = await fotoTemporal(env, id).leer();
+  if (!guardada) return new Response('No encontrada', { status: 404 });
+  return new Response(guardada.bytes, {
+    headers: { 'content-type': guardada.tipo, 'cache-control': 'no-store', 'x-robots-tag': 'noindex' },
   });
 }
 

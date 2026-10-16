@@ -10,5 +10,10 @@
   },
   "kv_namespaces": [
     { "binding": "CACHE", "id": "3bbdb431f6f94a3b82bc214701406b4e" }
-  ]
+  ],
+  // Fotos temporales para Google Lens (lectura consistente desde cualquier región).
+  "durable_objects": {
+    "bindings": [{ "name": "FOTOS", "class_name": "FotoTemporal" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FotoTemporal"] }]
 }

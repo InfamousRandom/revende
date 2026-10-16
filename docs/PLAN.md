@@ -51,7 +51,9 @@ tienda y link, sin accesorios; una segunda búsqueda igual sale de cache.
 - [x] Botón "Foto" que abre la cámara (`input type=file accept=image/* capture=environment`).
 - [x] Reducir la imagen en el celular (~1024 px, JPEG) antes de enviarla.
 - [x] `POST /api/identificar`:
-  - Guarda la imagen en KV con ID aleatorio y TTL de 10 minutos.
+  - Guarda la imagen con ID aleatorio y vida de 10 minutos. Primero se usó KV, pero Google no la
+    veía (KV tarda en propagarse entre regiones); ahora vive en un Durable Object (`FotoTemporal`),
+    que se lee igual desde cualquier región. La URL termina en `.jpg`.
   - Ruta pública temporal `GET /api/img/:id` que la sirve (solo IDs válidos y vigentes).
   - Llama a SerpApi `engine=google_lens`, `url`, `country=mx`.
   - Devuelve 3 nombres candidatos y, si vienen, precios de coincidencias de producto.
@@ -60,8 +62,7 @@ tienda y link, sin accesorios; una segunda búsqueda igual sale de cache.
       confirma; entonces corre la búsqueda de precios de la Fase 2A.
 - [x] Consejo visible: fotografiar etiqueta, caja o número de modelo.
 - [ ] **(Pablo)** Probar en producción con una foto real (en local Lens no puede ver la foto porque
-      `localhost` no es público). Si falla seguido con "No se reconoció", revisar si es por la
-      propagación de KV entre regiones y considerar R2.
+      `localhost` no es público).
 - Notas: candidatos salen de `related_content` de Lens (nombres limpios) y de títulos de
   coincidencias; tocar un candidato llena el buscador y NO busca precios solo (cuida la cuota).
 
