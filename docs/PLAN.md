@@ -162,7 +162,7 @@ catálogo de la Fase 3.
 - [x] UI: muestra los candidatos, el usuario elige o edita el nombre (variante, capacidad) y
       confirma; entonces corre la búsqueda de precios de la Fase 2A.
 - [x] Consejo visible: fotografiar etiqueta, caja o número de modelo.
-- [ ] **(Pablo)** Probar en producción con una foto real (en local Lens no puede ver la foto porque
+- [x] **(Pablo)** Probar en producción con una foto real (confirmado por Pablo el 2026-10-16; en local Lens no puede ver la foto porque
       `localhost` no es público).
 - [ ] Al mostrar candidatos de la foto, incluir también productos de mi catálogo que coincidan.
 - [ ] Al confirmar un candidato, mostrar precios y mi historial de ese producto.
