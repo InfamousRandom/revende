@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SelectorProducto from './SelectorProducto';
 import Respaldo from './Respaldo';
-import { api, CANALES, CONDICIONES, guardarClave, hoy, leerClave } from './historial-api';
+import { api, CANALES, CONDICIONES, hoy } from './historial-api';
 
 const pesos = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 const num = (v) => {
@@ -26,7 +26,6 @@ const pct = (n) => `${Math.round(n * 100)} %`;
 // totales y corregir o borrar registros.
 export default function Historial({ prefill, onPrefillUsado }) {
   const [listo, setListo] = useState(false);
-  const [pedirClave, setPedirClave] = useState(false);
   const [modo, setModo] = useState('lista'); // lista | compra | elegir-venta | venta | editar
   const [ventaDe, setVentaDe] = useState(null); // operación en inventario, o null = venta sin compra registrada
   const [editando, setEditando] = useState(null);
@@ -40,19 +39,15 @@ export default function Historial({ prefill, onPrefillUsado }) {
   const [recarga, setRecarga] = useState(0);
   const relojAviso = useRef(null);
 
-  const manejarError = useCallback((e) => {
-    if (e.clave) setPedirClave(true);
-    else setError(e.message);
-  }, []);
+  const manejarError = useCallback((e) => setError(e.message), []);
 
   useEffect(() => {
-    if (!leerClave()) setPedirClave(true);
     setListo(true);
   }, []);
 
   // Carga la lista con los filtros (el texto espera a que dejes de escribir).
   useEffect(() => {
-    if (!listo || pedirClave || modo !== 'lista') return;
+    if (!listo || modo !== 'lista') return;
     let vigente = true;
     const params = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v));
     const reloj = setTimeout(async () => {
@@ -71,7 +66,7 @@ export default function Historial({ prefill, onPrefillUsado }) {
       vigente = false;
       clearTimeout(reloj);
     };
-  }, [listo, pedirClave, modo, filtros, recarga, manejarError]);
+  }, [listo, modo, filtros, recarga, manejarError]);
 
   // Atajo desde Calcular: "Lo compré" abre la compra ya llenada.
   useEffect(() => {
@@ -114,7 +109,6 @@ export default function Historial({ prefill, onPrefillUsado }) {
 
   return (
     <section className="bloque pantalla historial">
-      {pedirClave && <PedirClave onListo={() => setPedirClave(false)} />}
 
       {modo === 'lista' && (
         <>
@@ -281,45 +275,6 @@ export default function Historial({ prefill, onPrefillUsado }) {
   );
 }
 
-function PedirClave({ onListo }) {
-  const [clave, setClave] = useState('');
-  const [error, setError] = useState('');
-  const [probando, setProbando] = useState(false);
-
-  async function probar(e) {
-    e.preventDefault();
-    if (!clave.trim()) return;
-    setProbando(true);
-    setError('');
-    guardarClave(clave.trim());
-    try {
-      await api('/api/operaciones?estado=inventario');
-      onListo();
-    } catch (err) {
-      guardarClave('');
-      setError(err.clave ? 'Esa clave no es correcta.' : err.message);
-    } finally {
-      setProbando(false);
-    }
-  }
-
-  return (
-    <div className="ventana-fondo" role="dialog" aria-modal="true" aria-labelledby="t-clave">
-      <form className="ventana" onSubmit={probar}>
-        <h3 id="t-clave">Clave del historial</h3>
-        <p className="vacio">Tu historial es privado. Escribe tu clave una sola vez; se queda guardada en este celular.</p>
-        <div className="entrada">
-          <input type="password" autoComplete="current-password" autoFocus value={clave} onChange={(e) => setClave(e.target.value)} aria-label="Clave" />
-        </div>
-        {error && <p className="negativo">{error}</p>}
-        <button type="submit" className="boton boton-buscar" disabled={probando || !clave.trim()}>
-          {probando ? 'Revisando…' : 'Entrar'}
-        </button>
-      </form>
-    </div>
-  );
-}
-
 function CampoPesos({ id, etiqueta, valor, onChange, grande, autoFocus }) {
   return (
     <div className={`campo ${grande ? 'campo-grande' : ''}`}>
@@ -381,8 +336,7 @@ function FormCompra({ prefill, onGuardado, onCancelar, onError }) {
       });
       onGuardado(d.operacion);
     } catch (err) {
-      if (err.clave) onError(err);
-      else setError(err.message);
+      setError(err.message);
     } finally {
       setGuardando(false);
     }
@@ -391,7 +345,7 @@ function FormCompra({ prefill, onGuardado, onCancelar, onError }) {
   return (
     <form className="formulario" onSubmit={guardar}>
       <h2>Registrar compra</h2>
-      <SelectorProducto valor={producto} onElegir={setProducto} textoInicial={prefill?.nombre || ''} onError={(err) => (err.clave ? onError(err) : setError(err.message))} />
+      <SelectorProducto valor={producto} onElegir={setProducto} textoInicial={prefill?.nombre || ''} onError={(err) => setError(err.message)} />
       <CampoPesos id="precio-compra" etiqueta="¿Cuánto pagaste?" valor={precio} onChange={setPrecio} grande />
       <Chips etiqueta="Condición" opciones={CONDICIONES} valor={condicion} onChange={setCondicion} />
       <details className="mas-detalles">
@@ -448,8 +402,7 @@ function FormVenta({ operacion, onGuardado, onCancelar, onError }) {
         : await api('/api/operaciones', { metodo: 'POST', datos: { ...venta, producto_id: producto.id, condicion } });
       onGuardado(d.operacion);
     } catch (err) {
-      if (err.clave) onError(err);
-      else setError(err.message);
+      setError(err.message);
     } finally {
       setGuardando(false);
     }
@@ -468,7 +421,7 @@ function FormVenta({ operacion, onGuardado, onCancelar, onError }) {
           </div>
         </div>
       ) : (
-        <SelectorProducto valor={producto} onElegir={setProducto} onError={(err) => (err.clave ? onError(err) : setError(err.message))} />
+        <SelectorProducto valor={producto} onElegir={setProducto} onError={(err) => setError(err.message)} />
       )}
       <CampoPesos id="precio-venta" etiqueta="¿En cuánto lo vendiste?" valor={precio} onChange={setPrecio} grande autoFocus={Boolean(operacion)} />
       {gananciaPrevia != null && (
@@ -524,8 +477,7 @@ function FormEditar({ operacion: o, onGuardado, onCancelar, onError }) {
       await api(`/api/operaciones/${o.id}`, { metodo: 'PATCH', datos });
       onGuardado(mensaje);
     } catch (err) {
-      if (err.clave) onError(err);
-      else setError(err.message);
+      setError(err.message);
     } finally {
       setGuardando(false);
     }
@@ -559,8 +511,7 @@ function FormEditar({ operacion: o, onGuardado, onCancelar, onError }) {
       await api(`/api/operaciones/${o.id}`, { metodo: 'DELETE' });
       onGuardado(`Registro borrado: ${o.producto}`);
     } catch (err) {
-      if (err.clave) onError(err);
-      else setError(err.message);
+      setError(err.message);
       setGuardando(false);
     }
   }

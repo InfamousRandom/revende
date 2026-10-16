@@ -1,6 +1,6 @@
 // Worker de Revende: sirve la app (archivos de ./out) y las rutas /api.
 import { DurableObject } from 'cloudflare:workers';
-import { json, normalizar } from './util.js';
+import { json, normalizar, verificarOrigen } from './util.js';
 import { historial, esRutaHistorial } from './historial.js';
 const MODELO_DEFECTO = 'gemini-3-flash-preview';
 
@@ -101,7 +101,7 @@ async function analizar(request, env) {
 // ---------- /api/precios: precios de nuevo con SerpApi (Google Shopping, Mexico) ----------
 
 const CACHE_SEGUNDOS = 24 * 60 * 60;
-const VERSION_CACHE = 'precios2'; // cambia si cambia la forma de la respuesta
+const VERSION_CACHE = 'precios3'; // cambia si cambia la forma de la respuesta
 const UMBRAL_BAJO = 0.35; // menos del 35 % de la mediana: casi seguro accesorio o producto distinto
 const UMBRAL_ALTO = 2; // mas del doble de la mediana: paquete, edicion especial u otro producto
 const PALABRAS_ACCESORIO = [
@@ -119,13 +119,6 @@ function mediana(numeros) {
   return orden.length % 2 ? orden[mitad] : Math.round((orden[mitad - 1] + orden[mitad]) / 2);
 }
 
-// Sin clave de acceso (decisión de Pablo): solo se aceptan llamadas hechas desde la propia app.
-// Frena bots y usos casuales que gastarían la cuota; no detiene a alguien que falsifique encabezados.
-function verificarOrigen(request) {
-  const propio = new URL(request.url).origin;
-  if (request.headers.get('origin') === propio || request.headers.get('sec-fetch-site') === 'same-origin') return null;
-  return json({ ok: false, error: 'Esta función solo se puede usar desde la app.' }, 403);
-}
 
 // Convierte un resultado de SerpApi en oferta; null solo si no se puede mostrar (sin precio, tienda o link).
 function aOferta(r) {
@@ -141,6 +134,8 @@ function aOferta(r) {
     link,
     usado: Boolean(condicion),
     condicion: condicion.includes('reacond') || condicion.includes('renov') ? 'Reacondicionado' : condicion ? 'Usado' : 'Nuevo',
+    // Miniatura del producto (Google la sirve por https); solo si es una URL segura.
+    miniatura: String(r.thumbnail || '').startsWith('https://') ? r.thumbnail : null,
   };
 }
 
@@ -275,6 +270,7 @@ async function precios(request, env) {
     ok: true,
     consulta,
     producto: representativa.titulo,
+    imagen: representativa.miniatura || ofertas.find((o) => o.miniatura)?.miniatura || null,
     nuevos,
     usados,
     tiendas: new Set(ofertas.map((o) => o.tienda)).size,

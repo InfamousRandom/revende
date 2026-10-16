@@ -37,7 +37,7 @@ export default function Identificacion({ estado, onElegir, onCerrar }) {
             <>
               <p className="precios-pie">Lo identifiqué como</p>
               <p className="precios-producto">{estado.sugerido}</p>
-              <p className="precios-pie">Ya está en el buscador. Ajústalo si hace falta (capacidad, color) y toca “Buscar precios”.</p>
+              <p className="precios-pie">Abajo están sus precios. Si el nombre no es exacto, corrígelo en el buscador (capacidad, color) y vuelve a buscar.</p>
             </>
           )}
           {estado.fase === 'error' && <p role="alert">{estado.error}</p>}

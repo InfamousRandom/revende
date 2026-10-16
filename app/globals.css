@@ -687,3 +687,42 @@ body {
 .importacion { display: flex; flex-direction: column; gap: 8px; }
 .lista-resumen { margin: 0; padding-left: 18px; }
 .errores-importacion { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--tenue); }
+
+/* ---------- Precios más visuales ---------- */
+.producto-cabecera { display: flex; align-items: center; gap: 12px; }
+.producto-imagen { width: 64px; height: 64px; flex: none; object-fit: contain; background: #fff; border-radius: 10px; border: 1px solid var(--linea); }
+.oferta-con-foto { grid-template-columns: 44px minmax(0, 1fr) auto auto; }
+.oferta-foto { width: 44px; height: 44px; object-fit: contain; background: #fff; border-radius: 8px; border: 1px solid var(--linea); }
+.barra-precios { margin: 14px 2px 10px; }
+.barra-pista {
+  position: relative;
+  height: 10px;
+  margin: 10px 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--gana), var(--etiqueta) 50%, var(--pierde));
+  opacity: 0.9;
+}
+.barra-punto {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin: -4px 0 0 -4px;
+  border-radius: 50%;
+  background: var(--superficie);
+  box-shadow: 0 0 0 1.5px var(--tinta);
+}
+.barra-tipico {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 22px;
+  margin: -11px 0 0 -2px;
+  border-radius: 2px;
+  background: var(--tinta);
+}
+.barra-etiquetas { display: flex; justify-content: space-between; font-weight: 600; font-variant-numeric: tabular-nums; }
+.barra-etiquetas span { display: flex; flex-direction: column; }
+.barra-etiquetas span:last-child { align-items: flex-end; }
+.barra-etiqueta-tipico { align-items: center; }
+.barra-etiquetas small { font-size: 0.75rem; font-weight: 500; color: var(--tenue); }

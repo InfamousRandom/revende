@@ -26,7 +26,7 @@ Plan por fases y tareas: `docs/PLAN.md`. Léelo antes de empezar cualquier tarea
   `CapturaUsado.js`, `Respaldo.js`. El deploy de Cloudflare corre
   `npx wrangler d1 migrations apply revende-db --remote && npx wrangler deploy`.
   Local: `npx wrangler d1 migrations apply revende-db --local` y probar con
-  `npx wrangler dev --var REVENDE_CLAVE:prueba-local`. No escribir datos de prueba en producción.
+  `npx wrangler dev`. No escribir datos de prueba en producción.
 - Repo: github.com/InfamousRandom/revende (rama `main`).
 
 ## Stack
@@ -57,7 +57,7 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 
 | Nombre | Uso | Estado |
 | --- | --- | --- |
-| `REVENDE_CLAVE` | Protege solo las rutas del historial (D1, Fase 3) vía encabezado `x-revende-clave` | Configurado |
+| `REVENDE_CLAVE` | Ya no se usa: el historial tampoco pide clave (2026-10-16) | Configurado, se puede borrar |
 | `GEMINI_API_KEY` | Gemini (ruta inactiva) | Configurado |
 | `SERPAPI_KEY` | Google Shopping y Google Lens vía SerpApi | Configurado |
 
@@ -76,7 +76,7 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 - **Datos del usuario (historial de ventas, capturas de usado):** en Cloudflare D1 desde el inicio
   (binding `DB`, migraciones de Wrangler en `migrations/`). Es el dato más valioso de la app y el
   navegador puede borrar lo guardado localmente (sobre todo en iPhone) o se pierde al cambiar de
-  celular. Acceso solo vía Worker con `REVENDE_CLAVE`.
+  celular. Acceso solo vía Worker (mismo origen, sin clave).
 - **Catálogo de productos:** cada operación se liga a un producto de un catálogo (categoría, marca,
   modelo, variante, código de barras) elegido con autocompletado, para agrupar ventas del mismo
   artículo aunque se escriba distinto.
@@ -90,11 +90,13 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
     clave: solo aceptan llamadas desde la propia app (`Origin` o `Sec-Fetch-Site: same-origin`).
     Protección ligera, no segura contra quien falsifique encabezados. Para probar con curl:
     `-H "Origin: http://localhost:8787"`. `/api/img/:id.jpg` es pública a propósito (Google la descarga).
-  - Historial (rutas de D1, Fase 3) sí exige `x-revende-clave` igual a `REVENDE_CLAVE`, porque son
-    datos de Pablo. La app pide la clave una sola vez, en una ventanita la primera vez que se abre el
-    historial, y la recuerda en el celular.
+  - Historial (rutas de D1) tampoco pide clave (decisión de Pablo, 2026-10-16: no la ve necesaria).
+    Misma verificación de origen (`verificarOrigen` en `worker/util.js`). Riesgo aceptado: quien
+    falsifique encabezados podría leer o cambiar el historial.
 - Cuidar la cuota de SerpApi: cachear resultados en KV por consulta normalizada (24 h) y no
-  repetir búsquedas automáticas. Nunca disparar búsquedas al escribir; solo al confirmar.
+  repetir búsquedas automáticas. Nunca disparar búsquedas al escribir; solo al confirmar. Tomar
+  una foto cuenta como confirmación: identifica y busca precios sola (2 búsquedas por foto, pedido
+  de Pablo); elegir otra opción del nombre vuelve a buscar.
 - Nunca mostrar un precio sin su fuente (tienda + link). Nunca inventar ni estimar precios de
   mercado. Única excepción: la estimación por factor de categoría de la Fase 3 (a partir de las
   ventas de Pablo), siempre etiquetada con su origen.

@@ -45,7 +45,10 @@ export default function Precios({ estado, onUsar }) {
 
   return (
     <div className="precios" aria-live="polite">
-      <p className="precios-producto">{d.producto}</p>
+      <div className="producto-cabecera">
+        {d.imagen && <img className="producto-imagen" src={d.imagen} alt="" loading="lazy" referrerPolicy="no-referrer" />}
+        <p className="precios-producto">{d.producto}</p>
+      </div>
 
       <div className="precios-resumen">
         <Resumen titulo="Nuevo" grupo={d.nuevos} onUsar={onUsar} />
@@ -63,6 +66,8 @@ export default function Precios({ estado, onUsar }) {
         ))}
       </div>
 
+      {d[lista].rango && <BarraPrecios grupo={d[lista]} />}
+
       {!ofertas.length ? (
         <p className="precios-pie">
           {lista === 'usados'
@@ -72,7 +77,12 @@ export default function Precios({ estado, onUsar }) {
       ) : (
         <ul className="ofertas">
           {visibles.map((o, i) => (
-            <li key={`${o.tienda}-${o.precio}-${i}`} className={`oferta ${o.aviso ? 'oferta-marcada' : ''}`}>
+            <li key={`${o.tienda}-${o.precio}-${i}`} className={`oferta oferta-con-foto ${o.aviso ? 'oferta-marcada' : ''}`}>
+              {o.miniatura ? (
+                <img className="oferta-foto" src={o.miniatura} alt="" loading="lazy" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="oferta-foto" aria-hidden="true" />
+              )}
               <div className="oferta-info">
                 <span className="oferta-tienda">{o.tienda}</span>
                 <span className="oferta-titulo">{o.titulo}</span>
@@ -118,6 +128,39 @@ function Resumen({ titulo, grupo, onUsar }) {
       <button type="button" className="boton boton-referencia" onClick={() => onUsar(mediana, `precio típico ${titulo.toLowerCase()} en Google Shopping`)}>
         Usar precio
       </button>
+    </div>
+  );
+}
+
+// Barra de precios: cada punto es una oferta; resalta el más barato, el típico y el más caro.
+// Las ofertas marcadas (paquetes, accesorios) no se dibujan porque no cuentan para el rango.
+function BarraPrecios({ grupo }) {
+  const { min, mediana, max } = grupo.rango;
+  const puntos = grupo.ofertas.filter((o) => !o.aviso).map((o) => o.precio);
+  const ancho = max - min || 1;
+  const pos = (p) => `${Math.min(100, Math.max(0, ((p - min) / ancho) * 100))}%`;
+  return (
+    <div className="barra-precios" role="img" aria-label={`Precios de ${pesos.format(min)} a ${pesos.format(max)}; típico ${pesos.format(mediana)}`}>
+      <div className="barra-pista">
+        {puntos.map((p, i) => (
+          <span key={i} className="barra-punto" style={{ left: pos(p) }} />
+        ))}
+        <span className="barra-tipico" style={{ left: pos(mediana) }} />
+      </div>
+      <div className="barra-etiquetas">
+        <span>
+          <small>Más barato</small>
+          {pesos.format(min)}
+        </span>
+        <span className="barra-etiqueta-tipico">
+          <small>Típico</small>
+          {pesos.format(mediana)}
+        </span>
+        <span>
+          <small>Más caro</small>
+          {pesos.format(max)}
+        </span>
+      </div>
     </div>
   );
 }

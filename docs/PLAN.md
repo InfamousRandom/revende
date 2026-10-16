@@ -77,7 +77,7 @@ Esquema inicial (ajustable):
   acentos para autocompletar, la llena el Worker), `CHECK` de condición, canal y fuente, precios
   no negativos, precio y fecha de venta juntos (y de compra), y al menos compra o venta.
 
-API (todas con `x-revende-clave`; precios y foto siguen sin clave):
+API (sin clave; solo desde la app, igual que precios y foto):
 
 - [x] `GET /api/productos?q=` (autocompletado por nombre, marca, modelo o código de barras) y
       `POST /api/productos`.
@@ -131,7 +131,7 @@ Pantallas:
   - Tocar un registro abre "Corregir registro": editar cualquier campo, "Deshacer venta" (vuelve a
     inventario; no aparece en ventas sin compra) y "Borrar registro" con confirmación
     (`DELETE /api/operaciones/:id`).
-- [x] Clave de acceso pedida una sola vez (ventanita al abrir el historial), guardada en el celular.
+- [x] ~~Clave de acceso para el historial~~: se quitó a pedido de Pablo; solo mismo origen.
 - [x] Captura rápida de precio de usado desde la tarjeta de resultados (`app/CapturaUsado.js`):
       "Anotar un precio de usado que viste" en Buscar, 3 acciones; se ve en "Tus ventas".
 - [x] Exportar e importar CSV: sección "Respaldo" al final del Historial (`app/Respaldo.js`).
@@ -168,6 +168,9 @@ catálogo de la Fase 3.
       cuyas palabras más se repiten entre los resultados de Lens, sin las que casi nadie usa ("envío
       gratis", tiendas). Se pone en el buscador; las demás opciones y los precios de la foto quedan
       plegados. No busca precios solo (1 búsqueda por foto, no 2). Foto reducida a 800 px.
+- [x] Después de la foto se buscan los precios solos (pedido de Pablo): 2 búsquedas por foto.
+- [x] Tarjeta de precios más visual: foto del producto, miniatura por oferta y barra de precios
+      (más barato, típico, más caro, un punto por oferta). Cache `precios3` por el cambio de formato.
 - [ ] Al mostrar candidatos de la foto, incluir también productos de mi catálogo que coincidan.
 - [ ] Al confirmar un candidato, mostrar precios y mi historial de ese producto.
 - Notas: candidatos salen de `related_content` de Lens (nombres limpios) y de títulos de

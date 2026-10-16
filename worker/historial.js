@@ -1,6 +1,6 @@
 // Fase 3: historial en D1 (catálogo de productos y operaciones de compra/venta).
-// Todas las rutas exigen x-revende-clave: son datos de Pablo (ver CLAUDE.md).
-import { json, normalizar } from './util.js';
+// Sin clave (decisión de Pablo, 2026-10-16): como precios, solo acepta llamadas desde la app.
+import { json, normalizar, verificarOrigen } from './util.js';
 import { escribirCsv, leerCsv } from './csv.js';
 
 const CONDICIONES = ['sellado', 'como_nuevo', 'usado_bueno', 'con_detalles'];
@@ -32,11 +32,9 @@ const fallar = (mensaje) => {
   throw new ErrorDatos(mensaje);
 };
 
-function verificarClave(request, env) {
-  if (!env.REVENDE_CLAVE) return json({ ok: false, error: 'Falta configurar la clave de acceso en Cloudflare' }, 500);
-  if (request.headers.get('x-revende-clave') !== env.REVENDE_CLAVE) {
-    return json({ ok: false, error: 'Clave de acceso incorrecta', clave: true }, 401);
-  }
+function verificarAcceso(request, env) {
+  const fuera = verificarOrigen(request);
+  if (fuera) return fuera;
   if (!env.DB) return json({ ok: false, error: 'Falta configurar la base de datos (D1)' }, 500);
   return null;
 }
@@ -659,7 +657,7 @@ async function importar(request, env, url) {
 // ---------- Enrutador ----------
 
 export async function historial(request, env, url) {
-  const sinPermiso = verificarClave(request, env);
+  const sinPermiso = verificarAcceso(request, env);
   if (sinPermiso) return sinPermiso;
   const ruta = url.pathname;
   const metodo = request.method;

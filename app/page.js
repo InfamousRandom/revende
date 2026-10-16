@@ -6,7 +6,7 @@ import Identificacion, { reducirImagen } from './Foto';
 import Historial from './Historial';
 import TusVentas from './TusVentas';
 import CapturaUsado from './CapturaUsado';
-import { api, leerClave } from './historial-api';
+import { api } from './historial-api';
 
 const CamaraFoto = dynamic(() => import('./CamaraFoto'), { ssr: false });
 
@@ -103,6 +103,9 @@ export default function Inicio() {
   // Cargar lo guardado en este celular
   useEffect(() => {
     setCalc((c) => ({ ...c, margen: leer(CLAVE_CALC, {}).margen ?? c.margen }));
+    try {
+      localStorage.removeItem('revende:clave'); // el historial ya no usa clave
+    } catch {}
     setListo(true);
   }, []);
   useEffect(() => {
@@ -136,13 +139,14 @@ export default function Inicio() {
 
   const q = busqueda.trim();
 
-  // Solo busca cuando el usuario lo pide (botón o Enter): cuida la cuota de SerpApi.
-  async function buscarPrecios(e) {
+  // Busca cuando el usuario lo pide (botón o Enter) o justo después de identificar una foto.
+  // Nunca mientras se escribe: cuida la cuota de SerpApi. `texto` fuerza la consulta (foto).
+  async function buscarPrecios(e, texto) {
     e?.preventDefault();
-    if (q.length < 2 || precios.fase === 'cargando') return;
-    setPrecios({ fase: 'cargando', consulta: q });
+    const consulta = (texto ?? q).trim();
+    if (consulta.length < 2 || precios.fase === 'cargando') return;
+    setPrecios({ fase: 'cargando', consulta });
     setRefs({ fase: 'inactivo' });
-    if (ident.fase === 'ok') cerrarIdent(); // ya se usó el nombre de la foto
     let precioNuevo = null;
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), ESPERA_MAXIMA_MS);
@@ -150,19 +154,19 @@ export default function Inicio() {
       const r = await fetch('/api/precios', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ consulta: q }),
+        body: JSON.stringify({ consulta }),
         signal: control.signal,
       });
       const datos = await r.json().catch(() => null);
       if (r.ok && datos?.ok) {
-        setPrecios({ fase: 'ok', consulta: q, datos });
+        setPrecios({ fase: 'ok', consulta, datos });
         precioNuevo = datos.nuevos?.rango?.mediana || null;
         if (!datos.cache) cargarCuota();
       } else {
         if (r.status === 429) cargarCuota();
         setPrecios({
           fase: 'error',
-          consulta: q,
+          consulta,
           vacio: Boolean(datos?.vacio),
           error: datos?.error || 'No se pudieron traer los precios. Intenta de nuevo.',
         });
@@ -170,19 +174,17 @@ export default function Inicio() {
     } catch (err) {
       setPrecios({
         fase: 'error',
-        consulta: q,
+        consulta,
         error: err.name === 'AbortError' ? 'La búsqueda tardó demasiado. Intenta de nuevo.' : 'Sin conexión. Revisa tu internet e intenta de nuevo.',
       });
     } finally {
       clearTimeout(reloj);
     }
-    cargarReferencias({ q, precioNuevo });
+    cargarReferencias({ q: consulta, precioNuevo });
   }
 
-  // "Tus ventas": solo si ya está guardada la clave del historial (no la pide desde Buscar).
-  // Manda el precio nuevo típico para que el Worker lo recuerde y estime si nunca lo has vendido.
+  // "Tus ventas". Manda el precio nuevo típico para que el Worker lo recuerde y estime si nunca lo has vendido.
   async function cargarReferencias({ q: texto, productoId, precioNuevo }) {
-    if (!leerClave()) return;
     const params = new URLSearchParams(productoId ? { producto_id: productoId } : { q: texto });
     if (precioNuevo) params.set('precio_nuevo', precioNuevo);
     setRefs({ fase: 'cargando', consulta: texto });
@@ -220,7 +222,12 @@ export default function Inicio() {
       const datos = await r.json().catch(() => null);
       if (r.ok && datos?.ok) {
         setIdent({ fase: 'ok', vista, sugerido: datos.sugerido, candidatos: datos.candidatos || [], precios: datos.precios || [] });
-        if (datos.sugerido) setBusqueda(datos.sugerido); // el nombre con más coincidencias, listo para buscar
+        // El nombre con más coincidencias va al buscador y se buscan sus precios de una vez (pedido de
+        // Pablo): cada foto gasta 2 búsquedas, una de Lens y una de Google Shopping.
+        if (datos.sugerido) {
+          setBusqueda(datos.sugerido);
+          buscarPrecios(null, datos.sugerido);
+        }
       } else {
         setIdent({ fase: 'error', vista, error: datos?.error || 'No se pudo identificar la foto. Intenta de nuevo.' });
       }
@@ -250,6 +257,7 @@ export default function Inicio() {
   const elegirCandidato = (nombre) => {
     setBusqueda(nombre);
     cerrarIdent();
+    buscarPrecios(null, nombre);
   };
 
   const irA = (destino) => {

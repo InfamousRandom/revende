@@ -10,7 +10,7 @@ export default function Respaldo({ onImportado, onError }) {
   const [ocupado, setOcupado] = useState(false);
   const [mensaje, setMensaje] = useState('');
 
-  const fallo = (e) => (e.clave ? onError(e) : setMensaje(e.message));
+  const fallo = (e) => setMensaje(e.message);
 
   async function descargar() {
     setOcupado(true);
