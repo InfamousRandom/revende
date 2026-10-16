@@ -303,8 +303,15 @@ export class FotoTemporal extends DurableObject {
     await this.ctx.storage.put('foto', { bytes, tipo });
     await this.ctx.storage.setAlarm(Date.now() + IMAGEN_SEGUNDOS * 1000);
   }
-  async leer() {
-    return (await this.ctx.storage.get('foto')) || null;
+  // Lo llama la ruta pública cuando Google descarga la foto; registra quién la pidió (diagnóstico).
+  async leer(quien) {
+    const foto = (await this.ctx.storage.get('foto')) || null;
+    const lecturas = (await this.ctx.storage.get('lecturas')) || [];
+    if (lecturas.length < 5) await this.ctx.storage.put('lecturas', [...lecturas, { quien, encontrada: Boolean(foto) }]);
+    return foto;
+  }
+  async lecturas() {
+    return (await this.ctx.storage.get('lecturas')) || [];
   }
   async borrar() {
     await this.ctx.storage.deleteAlarm();
@@ -393,7 +400,12 @@ async function identificar(request, env) {
 
     const candidatos = candidatosDeLens(datos);
     if (!candidatos.length) {
-      return json({ ok: false, vacio: true, error: 'No se reconoció el artículo. Prueba con la etiqueta, la caja o el número de modelo.' }, 404);
+      // Diagnóstico para quien tiene la clave: ¿Google descargó la foto? ¿qué contestó Lens?
+      const detalle = {
+        descargas: await foto.lecturas(),
+        lens: { estado: datos.search_metadata?.status, error: datos.error, claves: Object.keys(datos), coincidencias: (datos.visual_matches || []).length },
+      };
+      return json({ ok: false, vacio: true, error: 'No se reconoció el artículo. Prueba con la etiqueta, la caja o el número de modelo.', detalle }, 404);
     }
     return json({ ok: true, candidatos, precios: preciosDeLens(datos) });
   } finally {
@@ -402,13 +414,13 @@ async function identificar(request, env) {
 }
 
 // Ruta publica temporal para que Google Lens descargue la foto. Solo IDs validos y vigentes.
-async function servirImagen(nombre, env) {
+async function servirImagen(nombre, request, env) {
   const id = ID_IMAGEN.exec(nombre)?.[1];
   if (!id || !env.FOTOS) return new Response('No encontrada', { status: 404 });
-  const guardada = await fotoTemporal(env, id).leer();
+  const guardada = await fotoTemporal(env, id).leer((request.headers.get('user-agent') || '?').slice(0, 120));
   if (!guardada) return new Response('No encontrada', { status: 404 });
   return new Response(guardada.bytes, {
-    headers: { 'content-type': guardada.tipo, 'cache-control': 'no-store', 'x-robots-tag': 'noindex' },
+    headers: { 'content-type': guardada.tipo, 'content-length': String(guardada.bytes.byteLength), 'cache-control': 'no-store' },
   });
 }
 
@@ -453,7 +465,7 @@ export default {
     }
 
     if (url.pathname.startsWith('/api/img/')) {
-      return servirImagen(url.pathname.slice('/api/img/'.length), env);
+      return servirImagen(url.pathname.slice('/api/img/'.length), request, env);
     }
 
     if (url.pathname === '/api/identificar') {
