@@ -37,7 +37,8 @@ mejores ofertas, sin salir a otras páginas.
   - Botón "Usar como referencia" que lleva un valor a la calculadora.
   - Estados de carga, vacío y error.
 - [x] Ajustes: campo "Clave de acceso" guardado en el celular; aviso si falta.
-- [ ] Mostrar búsquedas de SerpApi restantes del mes, si su API de cuenta lo permite (verificar endpoint).
+- [x] Mostrar búsquedas de SerpApi restantes del mes (`GET /api/cuota` → `serpapi.com/account.json`,
+      no gasta búsquedas; se consulta al abrir y tras cada búsqueda que no sale de cache).
 
 Terminado cuando: "PS5 Slim digital" muestra en menos de 5 s un rango coherente y ofertas con
 tienda y link, sin accesorios; una segunda búsqueda igual sale de cache.

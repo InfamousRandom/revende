@@ -377,3 +377,7 @@ body {
 @media (max-width: 360px) {
   .tiendas, .campos { grid-template-columns: 1fr; }
 }
+
+/* ---------- Búsquedas restantes ---------- */
+.cuota { margin: 8px 0 0; font-size: 0.82rem; color: var(--tenue); }
+.cuota-pocas { color: var(--pierde); font-weight: 600; }

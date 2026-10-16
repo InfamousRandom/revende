@@ -16,6 +16,11 @@ Plan por fases y tareas: `docs/PLAN.md`. Léelo antes de empezar cualquier tarea
   - `POST /api/analizar`: consulta Gemini con búsqueda de Google. **Inactivo**: la cuenta de
     Google está en prepago y responde 402 hasta que se compren créditos. No borrarlo; no es la ruta
     principal.
+- Fase 2A en local (commits en `main`, aún sin push):
+  - `POST /api/precios`: SerpApi Google Shopping, filtros y cache KV `CACHE` (24 h).
+  - `GET /api/cuota`: búsquedas restantes de SerpApi (consultar la cuenta no gasta búsquedas).
+  - App: botón "Buscar precios", tarjeta de resultados, clave de acceso en Ajustes.
+  - Para probar en local sin usar la clave real: `npx wrangler dev --var REVENDE_CLAVE:prueba-local`.
 - Repo: github.com/InfamousRandom/revende (rama `main`).
 
 ## Stack
@@ -53,7 +58,7 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 ## Decisiones tomadas (y por qué)
 
 - **Precio nuevo:** SerpApi, motor Google Shopping, México (`gl=mx`, `hl=es`). Datos reales y
-  estructurados. Plan gratuito: 250 búsquedas al mes, 50 por hora. Más exacto que pedirle precios
+  estructurados. Plan gratuito: 250 búsquedas al mes (la cuenta reporta 250 por hora como límite). Más exacto que pedirle precios
   a un LLM.
 - **Identificar por foto:** SerpApi, motor Google Lens (`country=mx`). Necesita la imagen en una
   URL pública: el Worker la guarda unos minutos en KV y la sirve en una ruta temporal.

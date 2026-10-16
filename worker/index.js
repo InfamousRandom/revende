@@ -258,6 +258,31 @@ async function precios(request, env) {
   return json({ ...respuesta, cache: false });
 }
 
+// ---------- /api/cuota: busquedas restantes de SerpApi (consultar la cuenta no gasta busquedas) ----------
+
+async function cuota(request, env) {
+  if (request.method !== 'GET') return json({ ok: false, error: 'Usa GET' }, 405);
+  const sinPermiso = verificarClave(request, env);
+  if (sinPermiso) return sinPermiso;
+  if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
+
+  const r = await fetch(`https://serpapi.com/account.json?api_key=${encodeURIComponent(env.SERPAPI_KEY)}`);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || typeof d.total_searches_left !== 'number') {
+    return json({ ok: false, error: 'No se pudo consultar cuántas búsquedas quedan' }, 502);
+  }
+  // Solo números: la respuesta de SerpApi trae la llave y el correo de la cuenta.
+  return json({
+    ok: true,
+    restantes: d.total_searches_left,
+    mensuales: d.searches_per_month,
+    usadas: d.this_month_usage,
+    renovacion: d.plan_renewal_date || null,
+    porHora: d.account_rate_limit_per_hour,
+    estaHora: d.this_hour_searches,
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -271,6 +296,14 @@ export default {
         serpapi: Boolean(env.SERPAPI_KEY),
         cache: Boolean(env.CACHE),
       });
+    }
+
+    if (url.pathname === '/api/cuota') {
+      try {
+        return await cuota(request, env);
+      } catch (e) {
+        return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+      }
     }
 
     if (url.pathname === '/api/precios') {

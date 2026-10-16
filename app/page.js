@@ -52,6 +52,11 @@ const CLAVE_CANALES = 'revende:canales';
 const CLAVE_CALC = 'revende:calculadora';
 const CLAVE_ACCESO = 'revende:clave';
 const ESPERA_MAXIMA_MS = 20000;
+const POCAS_BUSQUEDAS = 25;
+const fechaCorta = (iso) => {
+  const d = new Date(`${iso}T12:00:00`);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+};
 
 const leer = (clave, defecto) => {
   try {
@@ -82,6 +87,7 @@ export default function Inicio() {
   const [listo, setListo] = useState(false);
   const [clave, setClave] = useState('');
   const [precios, setPrecios] = useState({ fase: 'inactivo' });
+  const [cuota, setCuota] = useState(null);
   const ajustesClaveRef = useRef(null);
   const calcRef = useRef(null);
 
@@ -101,6 +107,19 @@ export default function Inicio() {
   useEffect(() => {
     if (listo) guardar(CLAVE_ACCESO, clave.trim());
   }, [clave, listo]);
+
+  // Búsquedas restantes de SerpApi. Consultarlas no gasta búsquedas.
+  async function cargarCuota(claveActual) {
+    if (!claveActual) return;
+    try {
+      const r = await fetch('/api/cuota', { headers: { 'x-revende-clave': claveActual } });
+      const d = await r.json();
+      if (d.ok) setCuota(d);
+    } catch {}
+  }
+  useEffect(() => {
+    if (listo) cargarCuota(leer(CLAVE_ACCESO, '').trim());
+  }, [listo]);
 
   const canal = canales.find((c) => c.id === calc.canal) || canales[0];
   const sinComision = canal.comision === '';
@@ -149,7 +168,9 @@ export default function Inicio() {
       const datos = await r.json().catch(() => null);
       if (r.ok && datos?.ok) {
         setPrecios({ fase: 'ok', consulta: q, datos });
+        if (!datos.cache) cargarCuota(clave.trim());
       } else {
+        if (r.status === 429) cargarCuota(clave.trim());
         setPrecios({
           fase: 'error',
           consulta: q,
@@ -225,6 +246,12 @@ export default function Inicio() {
             <button type="button" className="boton boton-buscar" onClick={buscarPrecios} disabled={q.length < 2 || precios.fase === 'cargando'}>
               {precios.fase === 'cargando' ? 'Buscando…' : 'Buscar precios'}
             </button>
+            {cuota && (
+              <p className={`cuota ${cuota.restantes <= POCAS_BUSQUEDAS ? 'cuota-pocas' : ''}`}>
+                Te quedan {cuota.restantes} de {cuota.mensuales} búsquedas este mes
+                {cuota.renovacion && ` · se renuevan el ${fechaCorta(cuota.renovacion)}`}. Repetir una búsqueda del mismo día no gasta.
+              </p>
+            )}
             {/* Si el texto cambió, el resultado ya no corresponde: se oculta hasta volver a buscar. */}
             {precios.consulta === q && <Precios estado={precios} onUsar={usarReferencia} onAbrirAjustes={abrirAjustesClave} />}
             <h3 className="subtitulo">Ver en cada tienda</h3>
