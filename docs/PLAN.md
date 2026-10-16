@@ -111,13 +111,19 @@ Pantallas:
     gastos plegados), con ganancia en vivo. 3 acciones. También "Otro artículo" sin compra registrada.
   - Atajo "Lo compré" en Calcular: abre la compra con el nombre buscado y el precio que te piden.
   - Autocompletado: si no coinciden todas las palabras, busca con cualquiera ("ps5 slim" encuentra
-    "PlayStation 5 Slim"). Falta: editar o borrar una operación mal registrada.
+    "PlayStation 5 Slim"). Editar y borrar: ver la tarea de la pantalla "Historial".
 - [x] Al buscar un artículo: tarjeta "Tus ventas" arriba de los precios nuevos, con el contraste
       precio contra rapidez (ej. "$7,200 en 3 días · $7,800 en 21 días").
 - [x] La calculadora usa como precio de venta esperado la mediana de mis ventas, o la estimación por
       categoría si no hay ventas, indicando de dónde salió el número.
-- [ ] Pantalla "Historial": búsqueda, filtros (categoría, vendido o en inventario), ganancia real,
+- [x] Pantalla "Historial": búsqueda, filtros (categoría, vendido o en inventario), ganancia real,
       margen, días promedio para vender y dinero parado en inventario.
+  - `GET /api/operaciones` acepta `categoria` y `q`, y devuelve `totales` sobre todo lo filtrado
+    (no solo los 200 listados) y las `categorias` con registros. Margen = ganancia ÷ precio de venta
+    de las ventas con compra registrada.
+  - Tocar un registro abre "Corregir registro": editar cualquier campo, "Deshacer venta" (vuelve a
+    inventario; no aparece en ventas sin compra) y "Borrar registro" con confirmación
+    (`DELETE /api/operaciones/:id`).
 - [x] Clave de acceso pedida una sola vez (ventanita al abrir el historial), guardada en el celular.
 - [x] Captura rápida de precio de usado desde la tarjeta de resultados (`app/CapturaUsado.js`):
       "Anotar un precio de usado que viste" en Buscar, 3 acciones; se ve en "Tus ventas".

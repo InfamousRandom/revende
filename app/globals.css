@@ -656,3 +656,27 @@ body {
   border-radius: 8px;
 }
 .captura { margin-top: 12px; }
+
+/* Historial: filtros, totales, filas y borrar */
+.filtros { display: flex; flex-direction: column; gap: 4px; margin: 16px 0 4px; }
+.filtros .selector { margin: 6px 0 2px; }
+.chips-chicos .chip { min-height: 36px; padding: 4px 12px; font-size: 0.9rem; }
+.totales {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 16px;
+  margin: 12px 0;
+  padding: 14px;
+  background: var(--superficie);
+  border: 1.5px solid var(--linea);
+  border-radius: 12px;
+}
+.totales div { display: flex; flex-direction: column; }
+.totales dt { font-size: 0.82rem; color: var(--tenue); }
+.totales dd { margin: 0; font-family: var(--display); font-weight: 700; font-size: 1.45rem; font-variant-numeric: tabular-nums; }
+.totales small { font-family: var(--texto); font-size: 0.8rem; font-weight: 500; color: var(--tenue); }
+.fila-con-accion { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--linea); }
+.ofertas .fila-con-accion:first-child { border-top: 0; }
+.fila-con-accion .fila-operacion { flex: 1; min-width: 0; border-top: 0; grid-template-columns: minmax(0, 1fr) auto; }
+.boton-vender { min-height: 44px; padding: 0 4px; font: inherit; font-weight: 600; background: none; border: 0; cursor: pointer; }
+.boton-borrar { background: transparent; color: var(--pierde); border-color: var(--pierde); }

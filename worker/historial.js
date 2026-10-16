@@ -280,8 +280,10 @@ async function actualizarOperacion(request, env, id) {
 async function listarOperaciones(env, url) {
   const estado = url.searchParams.get('estado');
   const productoId = url.searchParams.get('producto_id');
+  const categoria = normalizar(url.searchParams.get('categoria') || '');
+  const q = normalizar(url.searchParams.get('q') || '').slice(0, MAX_TEXTO);
   const filtros = [];
-  const valores = [hoyMexico()];
+  const valores = [];
   if (estado === 'inventario') filtros.push('o.fecha_venta IS NULL');
   else if (estado === 'vendido') filtros.push('o.fecha_venta IS NOT NULL');
   else if (estado) fallar('estado: usa inventario o vendido');
@@ -291,13 +293,58 @@ async function listarOperaciones(env, url) {
     filtros.push('o.producto_id = ?');
     valores.push(id);
   }
-  const { results } = await env.DB.prepare(
-    `${SELECT_OPERACION} ${filtros.length ? `WHERE ${filtros.join(' AND ')}` : ''}
-     ORDER BY coalesce(o.fecha_venta, o.fecha_compra) DESC, o.id DESC LIMIT 200`,
-  )
-    .bind(...valores)
-    .all();
-  return json({ ok: true, operaciones: results });
+  if (categoria) {
+    filtros.push('p.categoria = ?');
+    valores.push(categoria);
+  }
+  for (const palabra of q ? q.split(' ').slice(0, 6) : []) {
+    filtros.push(`p.busqueda LIKE ? ESCAPE '\\'`);
+    valores.push(`%${paraLike(palabra)}%`);
+  }
+  const donde = filtros.length ? `WHERE ${filtros.join(' AND ')}` : '';
+
+  // Totales sobre todo lo filtrado (no solo los 200 que se listan).
+  const conAmbos = 'o.precio_venta IS NOT NULL AND o.precio_compra IS NOT NULL';
+  const [{ results }, totales, { results: categorias }] = await Promise.all([
+    env.DB.prepare(`${SELECT_OPERACION} ${donde} ORDER BY coalesce(o.fecha_venta, o.fecha_compra) DESC, o.id DESC LIMIT 200`)
+      .bind(hoyMexico(), ...valores)
+      .all(),
+    env.DB.prepare(
+      `SELECT count(*) AS registros,
+         coalesce(sum(o.fecha_venta IS NOT NULL), 0) AS vendidos,
+         coalesce(sum(o.fecha_venta IS NULL), 0) AS en_inventario,
+         coalesce(sum(CASE WHEN o.fecha_venta IS NULL THEN o.precio_compra END), 0) AS dinero_parado,
+         coalesce(sum(o.precio_venta), 0) AS ingresos,
+         coalesce(sum(CASE WHEN ${conAmbos} THEN o.precio_venta - o.precio_compra - o.envio_mxn - o.otros_gastos_mxn END), 0) AS ganancia,
+         sum(CASE WHEN ${conAmbos} THEN o.precio_venta END) AS ventas_con_compra,
+         avg(CASE WHEN ${conAmbos} AND o.fecha_compra IS NOT NULL THEN julianday(o.fecha_venta) - julianday(o.fecha_compra) END) AS dias_promedio
+       FROM operaciones o JOIN productos p ON p.id = o.producto_id ${donde}`,
+    )
+      .bind(...valores)
+      .first(),
+    env.DB.prepare(
+      `SELECT DISTINCT p.categoria FROM productos p JOIN operaciones o ON o.producto_id = p.id
+       WHERE p.categoria IS NOT NULL ORDER BY p.categoria`,
+    ).all(),
+  ]);
+  const { ventas_con_compra: base, dias_promedio: diasProm, ...resto } = totales;
+  return json({
+    ok: true,
+    operaciones: results,
+    totales: {
+      ...resto,
+      // Margen real: ganancia ÷ precio de venta, solo de ventas con compra registrada.
+      margen: base ? Math.round((totales.ganancia / base) * 1000) / 1000 : null,
+      dias_promedio: diasProm == null ? null : Math.round(diasProm),
+    },
+    categorias: categorias.map((c) => c.categoria),
+  });
+}
+
+async function borrarOperacion(env, id) {
+  const { meta } = await env.DB.prepare('DELETE FROM operaciones WHERE id = ?').bind(id).run();
+  if (!meta.changes) return json({ ok: false, error: 'Esa operación no existe' }, 404);
+  return json({ ok: true, borrada: id });
 }
 
 // ---------- Referencias: lo que ya vendí de este artículo ----------
@@ -451,6 +498,7 @@ export async function historial(request, env, url) {
         return operacion ? json({ ok: true, operacion }) : json({ ok: false, error: 'Esa operación no existe' }, 404);
       }
       if (metodo === 'PATCH') return await actualizarOperacion(request, env, id);
+      if (metodo === 'DELETE') return await borrarOperacion(env, id);
     }
     return json({ ok: false, error: 'Ruta o método no válido' }, 404);
   } catch (e) {

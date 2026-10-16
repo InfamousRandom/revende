@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import SelectorProducto from './SelectorProducto';
 import { api, CANALES, CONDICIONES, guardarClave, hoy, leerClave } from './historial-api';
 
@@ -14,41 +14,63 @@ const fechaCorta = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString('es-M
 // Cuánto tardó en venderse desde la compra.
 const tardo = (n) => (n == null ? null : n === 0 ? 'vendido el mismo día' : `en ${dias(n)}`);
 
-// Pantalla "Historial": registrar compras y ventas en menos de 30 s y ver inventario y ventas.
+const ESTADOS = [
+  ['', 'Todo'],
+  ['inventario', 'En inventario'],
+  ['vendido', 'Vendidos'],
+];
+const pct = (n) => `${Math.round(n * 100)} %`;
+
+// Pantalla "Historial": registrar compras y ventas en menos de 30 s, buscar, filtrar, ver
+// totales y corregir o borrar registros.
 export default function Historial({ prefill, onPrefillUsado }) {
   const [listo, setListo] = useState(false);
   const [pedirClave, setPedirClave] = useState(false);
-  const [modo, setModo] = useState('lista'); // lista | compra | elegir-venta | venta
+  const [modo, setModo] = useState('lista'); // lista | compra | elegir-venta | venta | editar
   const [ventaDe, setVentaDe] = useState(null); // operación en inventario, o null = venta sin compra registrada
-  const [datos, setDatos] = useState({ inventario: [], vendidos: [] });
+  const [editando, setEditando] = useState(null);
+  const [filtros, setFiltros] = useState({ estado: '', categoria: '', q: '' });
+  const [datos, setDatos] = useState({ operaciones: [], totales: null, categorias: [] });
+  const [inventario, setInventario] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
   const [datosCompra, setDatosCompra] = useState(null); // copia del atajo "Lo compré"
+  const [recarga, setRecarga] = useState(0);
+  const relojAviso = useRef(null);
 
   const manejarError = useCallback((e) => {
     if (e.clave) setPedirClave(true);
     else setError(e.message);
   }, []);
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
-    setError('');
-    try {
-      const [inv, ven] = await Promise.all([api('/api/operaciones?estado=inventario'), api('/api/operaciones?estado=vendido')]);
-      setDatos({ inventario: inv.operaciones, vendidos: ven.operaciones });
-    } catch (e) {
-      manejarError(e);
-    } finally {
-      setCargando(false);
-    }
-  }, [manejarError]);
-
   useEffect(() => {
-    if (leerClave()) cargar();
-    else setPedirClave(true);
+    if (!leerClave()) setPedirClave(true);
     setListo(true);
-  }, [cargar]);
+  }, []);
+
+  // Carga la lista con los filtros (el texto espera a que dejes de escribir).
+  useEffect(() => {
+    if (!listo || pedirClave || modo !== 'lista') return;
+    let vigente = true;
+    const params = new URLSearchParams(Object.entries(filtros).filter(([, v]) => v));
+    const reloj = setTimeout(async () => {
+      setCargando(true);
+      setError('');
+      try {
+        const d = await api(`/api/operaciones?${params}`);
+        if (vigente) setDatos(d);
+      } catch (e) {
+        if (vigente) manejarError(e);
+      } finally {
+        if (vigente) setCargando(false);
+      }
+    }, filtros.q ? 300 : 0);
+    return () => {
+      vigente = false;
+      clearTimeout(reloj);
+    };
+  }, [listo, pedirClave, modo, filtros, recarga, manejarError]);
 
   // Atajo desde Calcular: "Lo compré" abre la compra ya llenada.
   useEffect(() => {
@@ -62,27 +84,36 @@ export default function Historial({ prefill, onPrefillUsado }) {
   const terminar = (mensaje) => {
     setModo('lista');
     setVentaDe(null);
+    setEditando(null);
     setDatosCompra(null);
     setAviso(mensaje);
-    setTimeout(() => setAviso(''), 3000);
+    clearTimeout(relojAviso.current); // un aviso nuevo no debe borrarse con el temporizador del anterior
+    relojAviso.current = setTimeout(() => setAviso(''), 3000);
     window.scrollTo(0, 0);
-    cargar();
+    setRecarga((n) => n + 1);
   };
 
-  if (!listo) return null;
+  async function elegirVenta() {
+    setModo('elegir-venta');
+    try {
+      setInventario((await api('/api/operaciones?estado=inventario')).operaciones);
+    } catch (e) {
+      manejarError(e);
+    }
+  }
 
-  const invertido = datos.inventario.reduce((t, o) => t + (o.precio_compra || 0), 0);
+  const vender = (o) => {
+    setVentaDe(o);
+    setModo('venta');
+  };
+  const filtrar = (cambio) => setFiltros((f) => ({ ...f, ...cambio }));
+
+  if (!listo) return null;
+  const t = datos.totales;
 
   return (
     <section className="bloque pantalla historial">
-      {pedirClave && (
-        <PedirClave
-          onListo={() => {
-            setPedirClave(false);
-            cargar();
-          }}
-        />
-      )}
+      {pedirClave && <PedirClave onListo={() => setPedirClave(false)} />}
 
       {modo === 'lista' && (
         <>
@@ -101,62 +132,92 @@ export default function Historial({ prefill, onPrefillUsado }) {
             <button type="button" className="boton boton-buscar" onClick={() => setModo('compra')}>
               Registré una compra
             </button>
-            <button type="button" className="boton boton-secundario" onClick={() => setModo('elegir-venta')}>
+            <button type="button" className="boton boton-secundario" onClick={elegirVenta}>
               Registré una venta
             </button>
           </div>
 
-          <h3 className="lista-encabezado">
-            En inventario <span>{datos.inventario.length}</span>
-            {invertido > 0 && <small>{pesos.format(invertido)} invertido</small>}
-          </h3>
-          {!datos.inventario.length ? (
-            <p className="vacio">{cargando ? 'Cargando…' : 'Nada en inventario.'}</p>
-          ) : (
-            <ul className="ofertas">
-              {datos.inventario.map((o) => (
-                <li key={o.id}>
-                  <button type="button" className="fila-operacion" onClick={() => { setVentaDe(o); setModo('venta'); }}>
-                    <span className="oferta-info">
-                      <span className="oferta-tienda">{o.producto}</span>
-                      <span className="oferta-titulo">Compraste {o.fecha_compra === hoy() ? 'hoy' : `hace ${dias(o.dias)}`}</span>
-                    </span>
-                    <span className="oferta-precio">{pesos.format(o.precio_compra)}</span>
-                    <span className="fila-accion">Vender</span>
-                  </button>
-                </li>
+          <div className="filtros">
+            <div className="entrada">
+              <input type="search" placeholder="Buscar en tu historial" aria-label="Buscar en tu historial" value={filtros.q} onChange={(e) => filtrar({ q: e.target.value })} />
+            </div>
+            <div className="selector" role="tablist" aria-label="Estado">
+              {ESTADOS.map(([id, nombre]) => (
+                <button key={id || 'todo'} type="button" role="tab" aria-selected={filtros.estado === id} className={filtros.estado === id ? 'activo' : ''} onClick={() => filtrar({ estado: id })}>
+                  {nombre}
+                </button>
               ))}
-            </ul>
+            </div>
+            {datos.categorias.length > 1 && (
+              <div className="chips chips-chicos" role="radiogroup" aria-label="Categoría">
+                {['', ...datos.categorias].map((c) => (
+                  <button key={c || 'todas'} type="button" role="radio" aria-checked={filtros.categoria === c} className={`chip ${filtros.categoria === c ? 'activo' : ''}`} onClick={() => filtrar({ categoria: c })}>
+                    {c || 'Todas'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {t && t.registros > 0 && (
+            <dl className="totales">
+              <div>
+                <dt>Ganancia real</dt>
+                <dd className={t.ganancia >= 0 ? 'positivo' : 'negativo'}>{pesos.format(t.ganancia)}</dd>
+              </div>
+              <div>
+                <dt>Margen</dt>
+                <dd>{t.margen == null ? '—' : pct(t.margen)}</dd>
+              </div>
+              <div>
+                <dt>Tardas en vender</dt>
+                <dd>{t.dias_promedio == null ? '—' : dias(t.dias_promedio) || '0 días'}</dd>
+              </div>
+              <div>
+                <dt>Dinero parado</dt>
+                <dd>
+                  {pesos.format(t.dinero_parado)}
+                  <small> en {t.en_inventario}</small>
+                </dd>
+              </div>
+            </dl>
           )}
 
-          <h3 className="lista-encabezado">
-            Vendidos <span>{datos.vendidos.length}</span>
-          </h3>
-          {!datos.vendidos.length ? (
-            <p className="vacio">{cargando ? 'Cargando…' : 'Todavía no hay ventas.'}</p>
+          {!datos.operaciones.length ? (
+            <p className="vacio">{cargando ? 'Cargando…' : filtros.q || filtros.estado || filtros.categoria ? 'Nada con esos filtros.' : 'Todavía no hay registros.'}</p>
           ) : (
             <ul className="ofertas">
-              {datos.vendidos.slice(0, 20).map((o) => (
-                <li key={o.id} className="oferta">
-                  <div className="oferta-info">
-                    <span className="oferta-tienda">{o.producto}</span>
-                    <span className="oferta-titulo">
-                      {[fechaCorta(o.fecha_venta), tardo(o.dias)].filter(Boolean).join(' · ')}
+              {datos.operaciones.map((o) => (
+                <li key={o.id} className="fila-con-accion">
+                  <button type="button" className="fila-operacion" onClick={() => { setEditando(o); setModo('editar'); }}>
+                    <span className="oferta-info">
+                      <span className="oferta-tienda">{o.producto}</span>
+                      <span className="oferta-titulo">
+                        {o.estado === 'inventario'
+                          ? `En inventario · compraste ${o.fecha_compra === hoy() ? 'hoy' : `hace ${dias(o.dias)}`}`
+                          : [fechaCorta(o.fecha_venta), tardo(o.dias)].filter(Boolean).join(' · ')}
+                      </span>
                     </span>
-                  </div>
-                  <span className="venta-cifras">
-                    <span className="oferta-precio">{pesos.format(o.precio_venta)}</span>
-                    {o.ganancia != null && (
-                      <small className={o.ganancia >= 0 ? 'positivo' : 'negativo'}>
-                        {o.ganancia >= 0 ? '+' : '−'}
-                        {pesos.format(Math.abs(o.ganancia))}
-                      </small>
-                    )}
-                  </span>
+                    <span className="venta-cifras">
+                      <span className="oferta-precio">{pesos.format(o.estado === 'inventario' ? o.precio_compra : o.precio_venta)}</span>
+                      {o.ganancia != null && (
+                        <small className={o.ganancia >= 0 ? 'positivo' : 'negativo'}>
+                          {o.ganancia >= 0 ? '+' : '−'}
+                          {pesos.format(Math.abs(o.ganancia))}
+                        </small>
+                      )}
+                    </span>
+                  </button>
+                  {o.estado === 'inventario' && (
+                    <button type="button" className="fila-accion boton-vender" onClick={() => vender(o)}>
+                      Vender
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
           )}
+          {t?.registros > datos.operaciones.length && <p className="precios-pie">Se muestran los {datos.operaciones.length} más recientes; los totales cuentan todo.</p>}
         </>
       )}
 
@@ -176,9 +237,9 @@ export default function Historial({ prefill, onPrefillUsado }) {
         <>
           <h2>¿Qué vendiste?</h2>
           <ul className="ofertas">
-            {datos.inventario.map((o) => (
+            {inventario.map((o) => (
               <li key={o.id}>
-                <button type="button" className="fila-operacion" onClick={() => { setVentaDe(o); setModo('venta'); }}>
+                <button type="button" className="fila-operacion" onClick={() => vender(o)}>
                   <span className="oferta-info">
                     <span className="oferta-tienda">{o.producto}</span>
                     <span className="oferta-titulo">Compra {pesos.format(o.precio_compra)}</span>
@@ -188,7 +249,7 @@ export default function Historial({ prefill, onPrefillUsado }) {
               </li>
             ))}
           </ul>
-          <button type="button" className="boton boton-secundario boton-mas" onClick={() => { setVentaDe(null); setModo('venta'); }}>
+          <button type="button" className="boton boton-secundario boton-mas" onClick={() => vender(null)}>
             Otro artículo (no registré la compra)
           </button>
           <button type="button" className="enlace enlace-volver" onClick={() => setModo('lista')}>
@@ -203,6 +264,15 @@ export default function Historial({ prefill, onPrefillUsado }) {
           onError={manejarError}
           onCancelar={() => { setVentaDe(null); setModo('lista'); }}
           onGuardado={(o) => terminar(`Venta guardada: ${o.producto}${o.ganancia != null ? ` · ganaste ${pesos.format(o.ganancia)}` : ''}`)}
+        />
+      )}
+
+      {modo === 'editar' && editando && (
+        <FormEditar
+          operacion={editando}
+          onError={manejarError}
+          onCancelar={() => { setEditando(null); setModo('lista'); }}
+          onGuardado={(mensaje) => terminar(mensaje)}
         />
       )}
     </section>
@@ -417,6 +487,131 @@ function FormVenta({ operacion, onGuardado, onCancelar, onError }) {
       {error && <p className="negativo" role="alert">{error}</p>}
       <button type="submit" className="boton boton-buscar" disabled={guardando}>
         {guardando ? 'Guardando…' : 'Guardar venta'}
+      </button>
+      <button type="button" className="enlace enlace-volver" onClick={onCancelar}>
+        Cancelar
+      </button>
+    </form>
+  );
+}
+
+// Corregir un registro: cualquier campo, deshacer la venta (vuelve a inventario) o borrarlo.
+function FormEditar({ operacion: o, onGuardado, onCancelar, onError }) {
+  const texto = (v) => (v == null ? '' : String(v));
+  const [c, setC] = useState({
+    precio_compra: texto(o.precio_compra),
+    fecha_compra: texto(o.fecha_compra),
+    condicion: o.condicion || '',
+    lugar_compra: texto(o.lugar_compra),
+    precio_venta: texto(o.precio_venta),
+    fecha_venta: texto(o.fecha_venta),
+    canal: o.canal || '',
+    envio_mxn: o.envio_mxn ? String(o.envio_mxn) : '',
+    otros_gastos_mxn: o.otros_gastos_mxn ? String(o.otros_gastos_mxn) : '',
+    notas: texto(o.notas),
+  });
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
+  const cambiar = (campo) => (valor) => setC((x) => ({ ...x, [campo]: valor }));
+  const vendido = o.estado === 'vendido';
+
+  async function enviar(datos, mensaje) {
+    setGuardando(true);
+    setError('');
+    try {
+      await api(`/api/operaciones/${o.id}`, { metodo: 'PATCH', datos });
+      onGuardado(mensaje);
+    } catch (err) {
+      if (err.clave) onError(err);
+      else setError(err.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const guardar = (e) => {
+    e.preventDefault();
+    const pesosONulo = (v) => (String(v).trim() === '' ? null : num(v));
+    if (c.precio_compra.trim() === '' && c.precio_venta.trim() === '') return setError('Debe quedar el precio de compra o el de venta.');
+    enviar(
+      {
+        precio_compra: pesosONulo(c.precio_compra),
+        fecha_compra: c.fecha_compra || null,
+        condicion: c.condicion || null,
+        lugar_compra: c.lugar_compra || null,
+        precio_venta: pesosONulo(c.precio_venta),
+        fecha_venta: c.fecha_venta || null,
+        canal: c.canal || null,
+        envio_mxn: num(c.envio_mxn),
+        otros_gastos_mxn: num(c.otros_gastos_mxn),
+        notas: c.notas || null,
+      },
+      `Cambios guardados: ${o.producto}`,
+    );
+  };
+
+  async function borrar() {
+    if (!window.confirm(`¿Borrar este registro de ${o.producto}? No se puede deshacer.`)) return;
+    setGuardando(true);
+    try {
+      await api(`/api/operaciones/${o.id}`, { metodo: 'DELETE' });
+      onGuardado(`Registro borrado: ${o.producto}`);
+    } catch (err) {
+      if (err.clave) onError(err);
+      else setError(err.message);
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <form className="formulario" onSubmit={guardar}>
+      <h2>Corregir registro</h2>
+      <div className="producto-elegido">
+        <div>
+          <strong>{o.producto}</strong>
+          <small>{vendido ? 'Vendido' : 'En inventario'}</small>
+        </div>
+      </div>
+
+      <h3 className="ident-subtitulo">Compra</h3>
+      <div className="campos">
+        <CampoPesos id="e-precio-compra" etiqueta="Precio" valor={c.precio_compra} onChange={cambiar('precio_compra')} />
+        <CampoFecha id="e-fecha-compra" etiqueta="Fecha" valor={c.fecha_compra} onChange={cambiar('fecha_compra')} />
+      </div>
+      <Chips etiqueta="Condición" opciones={CONDICIONES} valor={c.condicion} onChange={(v) => cambiar('condicion')(c.condicion === v ? '' : v)} />
+      <div className="campo">
+        <label htmlFor="e-lugar">Dónde lo compraste</label>
+        <div className="entrada">
+          <input id="e-lugar" type="text" autoComplete="off" value={c.lugar_compra} onChange={(e) => cambiar('lugar_compra')(e.target.value)} />
+        </div>
+      </div>
+
+      <h3 className="ident-subtitulo">Venta {!vendido && '(déjala vacía si aún no se vende)'}</h3>
+      <div className="campos">
+        <CampoPesos id="e-precio-venta" etiqueta="Precio" valor={c.precio_venta} onChange={cambiar('precio_venta')} />
+        <CampoFecha id="e-fecha-venta" etiqueta="Fecha" valor={c.fecha_venta} onChange={cambiar('fecha_venta')} />
+        <CampoPesos id="e-envio" etiqueta="Envío" valor={c.envio_mxn} onChange={cambiar('envio_mxn')} />
+        <CampoPesos id="e-otros" etiqueta="Otros gastos" valor={c.otros_gastos_mxn} onChange={cambiar('otros_gastos_mxn')} />
+      </div>
+      <Chips etiqueta="¿Dónde?" opciones={CANALES} valor={c.canal} onChange={(v) => cambiar('canal')(c.canal === v ? '' : v)} />
+      <div className="campo">
+        <label htmlFor="e-notas">Notas</label>
+        <div className="entrada">
+          <input id="e-notas" type="text" autoComplete="off" value={c.notas} onChange={(e) => cambiar('notas')(e.target.value)} />
+        </div>
+      </div>
+
+      {error && <p className="negativo" role="alert">{error}</p>}
+      <button type="submit" className="boton boton-buscar" disabled={guardando}>
+        {guardando ? 'Guardando…' : 'Guardar cambios'}
+      </button>
+      {vendido && o.precio_compra != null && (
+        <button type="button" className="boton boton-secundario" disabled={guardando} onClick={() => enviar({ precio_venta: null }, `Venta deshecha: ${o.producto} volvió a inventario`)}>
+          Deshacer venta (vuelve a inventario)
+        </button>
+      )}
+      <button type="button" className="boton boton-borrar" disabled={guardando} onClick={borrar}>
+        Borrar registro
       </button>
       <button type="button" className="enlace enlace-volver" onClick={onCancelar}>
         Cancelar
