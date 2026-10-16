@@ -51,9 +51,12 @@ tienda y link, sin accesorios; una segunda búsqueda igual sale de cache.
 - [x] Botón "Foto" que abre la cámara (`input type=file accept=image/* capture=environment`).
 - [x] Reducir la imagen en el celular (~1024 px, JPEG) antes de enviarla.
 - [x] `POST /api/identificar`:
-  - Guarda la imagen con ID aleatorio y vida de 10 minutos. Primero se usó KV, pero Google no la
-    veía (KV tarda en propagarse entre regiones); ahora vive en un Durable Object (`FotoTemporal`),
-    que se lee igual desde cualquier región. La URL termina en `.jpg`.
+  - Guarda la imagen con ID aleatorio y vida de 10 minutos en un Durable Object (`FotoTemporal`),
+    que se lee igual desde cualquier región (Google la descarga desde EE. UU.). La URL termina en
+    `.jpg`. Nota: se cambió de KV a DO por una sospecha de propagación que resultó falsa (la prueba
+    usaba un archivo HTML en vez de imagen); el DO se quedó por ser más seguro.
+  - Si no hay candidatos, la respuesta trae `detalle` (solo con clave): quién descargó la foto y
+    qué contestó Lens. Verificado en producción el 2026-10-16: foto de PS5 → candidatos en 4.4 s.
   - Ruta pública temporal `GET /api/img/:id` que la sirve (solo IDs válidos y vigentes).
   - Llama a SerpApi `engine=google_lens`, `url`, `country=mx`.
   - Devuelve 3 nombres candidatos y, si vienen, precios de coincidencias de producto.
