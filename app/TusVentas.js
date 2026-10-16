@@ -76,6 +76,13 @@ export default function TusVentas({ estado, onUsar, onElegirOtro }) {
         <p className="precios-pie">Aún no has vendido este artículo.</p>
       )}
 
+      {resumen.capturas && (
+        <p className="precios-pie">
+          Precios de usado que anotaste: {resumen.capturas.n} · típico {pesos.format(resumen.capturas.mediana)}
+          {resumen.capturas.n > 1 && ` · ${pesos.format(resumen.capturas.min)} – ${pesos.format(resumen.capturas.max)}`}
+        </p>
+      )}
+
       {otros?.length > 0 && (
         <p className="precios-pie">
           ¿Era otro?{' '}

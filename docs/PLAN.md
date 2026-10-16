@@ -90,7 +90,7 @@ API (todas con `x-revende-clave`; precios y foto siguen sin clave):
     gastos en 0. Montos aceptan "$8,200". Las respuestas traen `estado`, `dias` y `ganancia`
     (venta − compra − envío − otros gastos) calculados.
   - También `GET /api/operaciones/:id`. Falta borrar operaciones (por si se registra mal).
-- [ ] `POST /api/capturas`.
+- [x] `POST /api/capturas` (fuente por defecto Marketplace, fecha de hoy, link opcional solo http/https).
 - [x] `GET /api/referencias?producto_id=` o `?q=`: mis ventas de ese producto (precio, días para
       vender, condición, canal, descuento vs publicado); mediana, mínimo y máximo de mis ventas y
       capturas (últimos 12 meses); si no hay ventas del producto, factor de la categoría = mediana de
@@ -119,7 +119,8 @@ Pantallas:
 - [ ] Pantalla "Historial": búsqueda, filtros (categoría, vendido o en inventario), ganancia real,
       margen, días promedio para vender y dinero parado en inventario.
 - [x] Clave de acceso pedida una sola vez (ventanita al abrir el historial), guardada en el celular.
-- [ ] Captura rápida de precio de usado desde la tarjeta de resultados.
+- [x] Captura rápida de precio de usado desde la tarjeta de resultados (`app/CapturaUsado.js`):
+      "Anotar un precio de usado que viste" en Buscar, 3 acciones; se ve en "Tus ventas".
 - [ ] Exportar e importar CSV.
 
 Terminado cuando: registro una venta en menos de 30 s; al buscar ese producto veo mi venta con días

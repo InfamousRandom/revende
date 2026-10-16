@@ -57,3 +57,8 @@ export const CANALES = [
   ['otro', 'Otro'],
 ];
 export const CATEGORIAS = ['celulares', 'consolas', 'videojuegos', 'laptops', 'tablets', 'audio', 'relojes', 'tenis', 'ropa', 'otro'];
+export const FUENTES = [
+  ['marketplace', 'Marketplace'],
+  ['ml_usado', 'ML usado'],
+  ['otro', 'Otro'],
+];

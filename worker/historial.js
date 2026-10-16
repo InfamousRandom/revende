@@ -8,7 +8,9 @@ const MAX_TEXTO = 120;
 const MAX_NOTAS = 1000;
 const MAX_PESOS = 10_000_000;
 
-export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias)(\/|$)/.test(ruta);
+export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas)(\/|$)/.test(ruta);
+
+const FUENTES = ['marketplace', 'ml_usado', 'otro'];
 
 const DIAS_REFERENCIA = 365; // ventas y capturas de los últimos 12 meses
 const NUEVO_REF_SEGUNDOS = 30 * 24 * 60 * 60; // precio nuevo recordado por producto (KV)
@@ -390,6 +392,32 @@ async function referencias(env, url) {
   return json({ ok: true, producto, otros, ventas, capturas, resumen, contraste, estimacion });
 }
 
+// ---------- Capturas de precio de usado (lo que vi publicado en Marketplace, ML, etc.) ----------
+
+async function crearCaptura(request, env) {
+  const c = await leerCuerpo(request);
+  const productoId = Number(c.producto_id);
+  if (!Number.isInteger(productoId) || productoId <= 0) fallar('Elige un producto');
+  const precio = pesos(c.precio, 'Precio');
+  if (!precio) fallar('Escribe el precio que viste');
+  const url = texto(c.url, 'Link', 500);
+  if (url && !/^https?:\/\/\S+$/i.test(url)) fallar('Link: pega una dirección que empiece con http');
+  const captura = {
+    fuente: opcion(c.fuente, 'Fuente', FUENTES) || 'marketplace',
+    condicion: opcion(c.condicion, 'Condición', CONDICIONES),
+    fecha: fecha(c.fecha, 'Fecha') || hoyMexico(),
+  };
+  const existe = await env.DB.prepare('SELECT id FROM productos WHERE id = ?').bind(productoId).first();
+  if (!existe) return json({ ok: false, error: 'Ese producto no existe' }, 404);
+  const guardada = await env.DB.prepare(
+    `INSERT INTO capturas_usado (producto_id, fuente, precio, condicion, url, fecha)
+     VALUES (?, ?, ?, ?, ?, ?) RETURNING *`,
+  )
+    .bind(productoId, captura.fuente, precio, captura.condicion, url, captura.fecha)
+    .first();
+  return json({ ok: true, captura: guardada }, 201);
+}
+
 // Si una venta no trae precio nuevo de referencia, usa el último recordado para ese producto.
 async function agregarPrecioNuevo(env, o) {
   if (o.precio_venta == null || o.precio_nuevo_ref != null || !env.CACHE) return o;
@@ -414,6 +442,7 @@ export async function historial(request, env, url) {
       if (metodo === 'POST') return await crearOperacion(request, env);
     }
     if (ruta === '/api/referencias' && metodo === 'GET') return await referencias(env, url);
+    if (ruta === '/api/capturas' && metodo === 'POST') return await crearCaptura(request, env);
     const unaOperacion = /^\/api\/operaciones\/(\d+)$/.exec(ruta);
     if (unaOperacion) {
       const id = Number(unaOperacion[1]);

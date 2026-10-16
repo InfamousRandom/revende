@@ -5,6 +5,7 @@ import Precios from './Precios';
 import Identificacion, { reducirImagen } from './Foto';
 import Historial from './Historial';
 import TusVentas from './TusVentas';
+import CapturaUsado from './CapturaUsado';
 import { api, leerClave } from './historial-api';
 
 const CamaraFoto = dynamic(() => import('./CamaraFoto'), { ssr: false });
@@ -323,6 +324,14 @@ export default function Inicio() {
                       estado={refs}
                       onUsar={usarReferencia}
                       onElegirOtro={(productoId) => cargarReferencias({ q, productoId })}
+                    />
+                  )}
+                  {refs.fase === 'ok' && refs.consulta === q && (
+                    <CapturaUsado
+                      key={refs.datos?.producto?.id || 'sin-producto'}
+                      producto={refs.datos?.producto}
+                      textoInicial={q}
+                      onGuardado={(p) => cargarReferencias({ q, productoId: p.id })}
                     />
                   )}
                   {precios.consulta === q && (
