@@ -19,8 +19,8 @@ Plan por fases y tareas: `docs/PLAN.md`. Léelo antes de empezar cualquier tarea
 - Fase 2A en producción (2026-10-16):
   - `POST /api/precios`: SerpApi Google Shopping, filtros y cache KV `CACHE` (24 h).
   - `GET /api/cuota`: búsquedas restantes de SerpApi (consultar la cuenta no gasta búsquedas).
-  - App: botón "Buscar precios", tarjeta de resultados, clave de acceso en Ajustes.
-  - Para probar en local sin usar la clave real: `npx wrangler dev --var REVENDE_CLAVE:prueba-local`.
+  - App: dos pantallas (Buscar, Calcular); foto con cámara dentro de la app (`CamaraFoto`) o galería.
+  - `POST /api/identificar` + `GET /api/img/:id.jpg` (Google Lens; foto temporal en Durable Object).
 - Repo: github.com/InfamousRandom/revende (rama `main`).
 
 ## Stack
@@ -51,7 +51,7 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 
 | Nombre | Uso | Estado |
 | --- | --- | --- |
-| `REVENDE_CLAVE` | Clave que la app manda en el encabezado `x-revende-clave` | Configurado |
+| `REVENDE_CLAVE` | Ya no se usa (se quitó la clave de acceso, 2026-10-16) | Configurado, se puede borrar |
 | `GEMINI_API_KEY` | Gemini (ruta inactiva) | Configurado |
 | `SERPAPI_KEY` | Google Shopping y Google Lens vía SerpApi | Configurado |
 
@@ -73,8 +73,11 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 ## Reglas
 
 - Ninguna llave en el frontend ni en el repo. Toda llamada a servicios externos pasa por el Worker.
-- Toda ruta `/api/*` (excepto `/api/salud`) exige `x-revende-clave` igual a `REVENDE_CLAVE`.
-  La app guarda esa clave en el celular desde Ajustes.
+- Sin clave de acceso ni pantalla de Ajustes (decisión de Pablo, 2026-10-16: era impráctico).
+  Las rutas que gastan cuota (`/api/precios`, `/api/identificar`, `/api/cuota`, `/api/analizar`)
+  solo aceptan llamadas desde la propia app (`Origin` o `Sec-Fetch-Site: same-origin`). Es una
+  protección ligera, no segura contra quien falsifique encabezados. `/api/img/:id.jpg` es pública
+  a propósito (Google la descarga). Para probar con curl: `-H "Origin: http://localhost:8787"`.
 - Cuidar la cuota de SerpApi: cachear resultados en KV por consulta normalizada (24 h) y no
   repetir búsquedas automáticas. Nunca disparar búsquedas al escribir; solo al confirmar.
 - Nunca mostrar un precio sin su fuente (tienda + link). Nunca inventar ni estimar precios.

@@ -19,7 +19,7 @@ mejores ofertas, sin salir a otras páginas.
       y pasar su ID para agregarlo a `wrangler.jsonc`. Alternativa: `npx wrangler kv namespace create revende-cache`.
 - [x] Binding KV `CACHE` en `wrangler.jsonc`.
 - [x] `POST /api/precios` en el Worker:
-  - Recibe `{ consulta }`, valida `x-revende-clave` y longitud.
+  - Recibe `{ consulta }`, valida que venga de la app (mismo origen) y la longitud.
   - Llama a SerpApi `engine=google_shopping`, `q`, `gl=mx`, `hl=es`, `google_domain=google.com.mx`.
   - Normaliza cada resultado: título, tienda, precio numérico en MXN, link, miniatura.
   - Filtra: sin precio, duplicados por tienda, y precios atípicos (accesorios) respecto a la mediana.
@@ -39,7 +39,7 @@ mejores ofertas, sin salir a otras páginas.
     usados (6 visibles + "Ver los N"); marcados en gris los paquetes/accesorios/atípicos.
   - Botón "Usar precio" en cada resumen que lleva ese valor a la calculadora.
   - Estados de carga, vacío y error.
-- [x] Ajustes: campo "Clave de acceso" guardado en el celular; aviso si falta.
+- [x] ~~Ajustes con clave de acceso~~: se quitó por impráctica; ahora solo mismo origen.
 - [x] Mostrar búsquedas de SerpApi restantes del mes (`GET /api/cuota` → `serpapi.com/account.json`,
       no gasta búsquedas; se consulta al abrir y tras cada búsqueda que no sale de cache).
 
@@ -48,14 +48,15 @@ tienda y link, sin accesorios; una segunda búsqueda igual sale de cache.
 
 ## Fase 2B: identificar por foto (SerpApi + Google Lens)
 
-- [x] Botón "Foto" que abre la cámara (`input type=file accept=image/* capture=environment`).
+- [x] Botón "Foto" que abre la cámara dentro de la app (`getUserMedia`, `app/CamaraFoto.js`), con "Galería"
+      como alternativa. Se cambió porque en varios celulares `capture=environment` abría la galería.
 - [x] Reducir la imagen en el celular (~1024 px, JPEG) antes de enviarla.
 - [x] `POST /api/identificar`:
   - Guarda la imagen con ID aleatorio y vida de 10 minutos en un Durable Object (`FotoTemporal`),
     que se lee igual desde cualquier región (Google la descarga desde EE. UU.). La URL termina en
     `.jpg`. Nota: se cambió de KV a DO por una sospecha de propagación que resultó falsa (la prueba
     usaba un archivo HTML en vez de imagen); el DO se quedó por ser más seguro.
-  - Si no hay candidatos, la respuesta trae `detalle` (solo con clave): quién descargó la foto y
+  - Si no hay candidatos, la respuesta trae `detalle`: quién descargó la foto y
     qué contestó Lens. Verificado en producción el 2026-10-16: foto de PS5 → candidatos en 4.4 s.
   - Ruta pública temporal `GET /api/img/:id` que la sirve (solo IDs válidos y vigentes).
   - Llama a SerpApi `engine=google_lens`, `url`, `country=mx`.

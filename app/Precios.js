@@ -13,7 +13,7 @@ const haceCuanto = (iso) => {
 };
 
 // Tarjeta de precios. `estado`: { fase: 'inactivo' | 'cargando' | 'ok' | 'error', datos, error, consulta }
-export default function Precios({ estado, onUsar, onAbrirAjustes }) {
+export default function Precios({ estado, onUsar }) {
   const [lista, setLista] = useState('nuevos');
   const [todas, setTodas] = useState(false);
 
@@ -31,11 +31,6 @@ export default function Precios({ estado, onUsar, onAbrirAjustes }) {
     return (
       <div className={`precios precios-error ${estado.vacio ? 'precios-vacio' : ''}`} role="alert">
         <p>{estado.error}</p>
-        {estado.faltaClave && (
-          <button type="button" className="boton boton-secundario" onClick={onAbrirAjustes}>
-            Ir a Ajustes
-          </button>
-        )}
       </div>
     );
   }

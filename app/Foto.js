@@ -23,7 +23,7 @@ export async function reducirImagen(archivo) {
 }
 
 // Tarjeta de identificación. `estado`: { fase: 'inactivo' | 'cargando' | 'ok' | 'error', vista, candidatos, precios, error }
-export default function Identificacion({ estado, onElegir, onCerrar, onAbrirAjustes }) {
+export default function Identificacion({ estado, onElegir, onCerrar }) {
   if (estado.fase === 'inactivo') return null;
 
   return (
@@ -42,12 +42,6 @@ export default function Identificacion({ estado, onElegir, onCerrar, onAbrirAjus
       </div>
 
       {estado.fase === 'cargando' && <div className="barra-carga" />}
-
-      {estado.fase === 'error' && estado.faltaClave && (
-        <button type="button" className="boton boton-secundario" onClick={onAbrirAjustes}>
-          Ir a Ajustes
-        </button>
-      )}
 
       {estado.fase === 'ok' && (
         <>

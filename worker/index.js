@@ -55,10 +55,8 @@ function leerJSON(texto) {
 async function analizar(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
   if (!env.GEMINI_API_KEY) return json({ ok: false, error: 'Falta GEMINI_API_KEY en Cloudflare' }, 500);
-  if (!env.REVENDE_CLAVE) return json({ ok: false, error: 'Falta REVENDE_CLAVE en Cloudflare' }, 500);
-  if (request.headers.get('x-revende-clave') !== env.REVENDE_CLAVE) {
-    return json({ ok: false, error: 'Clave de acceso incorrecta' }, 401);
-  }
+  const sinPermiso = verificarOrigen(request);
+  if (sinPermiso) return sinPermiso;
 
   let consulta = '';
   try {
@@ -123,12 +121,12 @@ function mediana(numeros) {
   return orden.length % 2 ? orden[mitad] : Math.round((orden[mitad - 1] + orden[mitad]) / 2);
 }
 
-function verificarClave(request, env) {
-  if (!env.REVENDE_CLAVE) return json({ ok: false, error: 'Falta configurar la clave de acceso en Cloudflare' }, 500);
-  if (request.headers.get('x-revende-clave') !== env.REVENDE_CLAVE) {
-    return json({ ok: false, error: 'Clave de acceso incorrecta. Revísala en Ajustes.' }, 401);
-  }
-  return null;
+// Sin clave de acceso (decisión de Pablo): solo se aceptan llamadas hechas desde la propia app.
+// Frena bots y usos casuales que gastarían la cuota; no detiene a alguien que falsifique encabezados.
+function verificarOrigen(request) {
+  const propio = new URL(request.url).origin;
+  if (request.headers.get('origin') === propio || request.headers.get('sec-fetch-site') === 'same-origin') return null;
+  return json({ ok: false, error: 'Esta función solo se puede usar desde la app.' }, 403);
 }
 
 // Convierte un resultado de SerpApi en oferta; null solo si no se puede mostrar (sin precio, tienda o link).
@@ -222,7 +220,7 @@ async function buscarSerpApi(consulta, env) {
 
 async function precios(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
-  const sinPermiso = verificarClave(request, env);
+  const sinPermiso = verificarOrigen(request);
   if (sinPermiso) return sinPermiso;
   if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
 
@@ -371,7 +369,7 @@ async function buscarLens(urlImagen, env) {
 
 async function identificar(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
-  const sinPermiso = verificarClave(request, env);
+  const sinPermiso = verificarOrigen(request);
   if (sinPermiso) return sinPermiso;
   if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
   if (!env.FOTOS) return json({ ok: false, error: 'Falta configurar el almacenamiento temporal de fotos' }, 500);
@@ -400,7 +398,7 @@ async function identificar(request, env) {
 
     const candidatos = candidatosDeLens(datos);
     if (!candidatos.length) {
-      // Diagnóstico para quien tiene la clave: ¿Google descargó la foto? ¿qué contestó Lens?
+      // Diagnóstico: ¿Google descargó la foto? ¿qué contestó Lens?
       const detalle = {
         descargas: await foto.lecturas(),
         lens: { estado: datos.search_metadata?.status, error: datos.error, claves: Object.keys(datos), coincidencias: (datos.visual_matches || []).length },
@@ -428,7 +426,7 @@ async function servirImagen(nombre, request, env) {
 
 async function cuota(request, env) {
   if (request.method !== 'GET') return json({ ok: false, error: 'Usa GET' }, 405);
-  const sinPermiso = verificarClave(request, env);
+  const sinPermiso = verificarOrigen(request);
   if (sinPermiso) return sinPermiso;
   if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
 
@@ -458,7 +456,6 @@ export default {
       return json({
         ok: true,
         gemini: Boolean(env.GEMINI_API_KEY),
-        clave: Boolean(env.REVENDE_CLAVE),
         serpapi: Boolean(env.SERPAPI_KEY),
         cache: Boolean(env.CACHE),
       });

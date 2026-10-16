@@ -4,6 +4,8 @@ import dynamic from 'next/dynamic';
 import Precios from './Precios';
 import Identificacion, { reducirImagen } from './Foto';
 
+const CamaraFoto = dynamic(() => import('./CamaraFoto'), { ssr: false });
+
 const Escaner = dynamic(() => import('./Escaner'), { ssr: false });
 
 // ---------- Tiendas: búsquedas prearmadas (verifica cada patrón la primera vez) ----------
@@ -43,7 +45,6 @@ const GRUPOS = [
 ];
 
 const CLAVE_CALC = 'revende:calculadora';
-const CLAVE_ACCESO = 'revende:clave';
 const ESPERA_MAXIMA_MS = 20000;
 const POCAS_BUSQUEDAS = 25;
 const fechaCorta = (iso) => {
@@ -76,7 +77,6 @@ const pct = (n) => `${Math.round(n * 100)}%`;
 const PESTANAS = [
   { id: 'buscar', nombre: 'Buscar', icono: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></> },
   { id: 'calcular', nombre: 'Calcular', icono: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2" /></> },
-  { id: 'ajustes', nombre: 'Ajustes', icono: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></> },
 ];
 
 export default function Inicio() {
@@ -85,38 +85,35 @@ export default function Inicio() {
   // Venta en persona o Marketplace: sin comisión. Solo gastos propios (gasolina, envío, limpieza).
   const [calc, setCalc] = useState({ venta: '', gastos: '', margen: '20', compra: '' });
   const [listo, setListo] = useState(false);
-  const [clave, setClave] = useState('');
   const [precios, setPrecios] = useState({ fase: 'inactivo' });
   const [cuota, setCuota] = useState(null);
   const [vista, setVista] = useState('buscar');
-  const claveRef = useRef(null);
   const fotoRef = useRef(null);
   const [ident, setIdent] = useState({ fase: 'inactivo' });
+  const [tomandoFoto, setTomandoFoto] = useState(false);
 
   // Cargar lo guardado en este celular
   useEffect(() => {
     setCalc((c) => ({ ...c, margen: leer(CLAVE_CALC, {}).margen ?? c.margen }));
-    setClave(leer(CLAVE_ACCESO, ''));
+    try {
+      localStorage.removeItem('revende:clave'); // ya no se usa clave de acceso
+    } catch {}
     setListo(true);
   }, []);
   useEffect(() => {
     if (listo) guardar(CLAVE_CALC, { margen: calc.margen });
   }, [calc.margen, listo]);
-  useEffect(() => {
-    if (listo) guardar(CLAVE_ACCESO, clave.trim());
-  }, [clave, listo]);
 
   // Búsquedas restantes de SerpApi. Consultarlas no gasta búsquedas.
-  async function cargarCuota(claveActual) {
-    if (!claveActual) return;
+  async function cargarCuota() {
     try {
-      const r = await fetch('/api/cuota', { headers: { 'x-revende-clave': claveActual } });
+      const r = await fetch('/api/cuota');
       const d = await r.json();
       if (d.ok) setCuota(d);
     } catch {}
   }
   useEffect(() => {
-    if (listo) cargarCuota(leer(CLAVE_ACCESO, '').trim());
+    if (listo) cargarCuota();
   }, [listo]);
 
   const set = (campo) => (e) => setCalc((c) => ({ ...c, [campo]: e.target.value }));
@@ -137,31 +134,26 @@ export default function Inicio() {
   async function buscarPrecios(e) {
     e?.preventDefault();
     if (q.length < 2 || precios.fase === 'cargando') return;
-    if (!clave.trim()) {
-      setPrecios({ fase: 'error', consulta: q, faltaClave: true, error: 'Falta la clave de acceso para buscar precios. Ponla en Ajustes.' });
-      return;
-    }
     setPrecios({ fase: 'cargando', consulta: q });
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), ESPERA_MAXIMA_MS);
     try {
       const r = await fetch('/api/precios', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-revende-clave': clave.trim() },
+        headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ consulta: q }),
         signal: control.signal,
       });
       const datos = await r.json().catch(() => null);
       if (r.ok && datos?.ok) {
         setPrecios({ fase: 'ok', consulta: q, datos });
-        if (!datos.cache) cargarCuota(clave.trim());
+        if (!datos.cache) cargarCuota();
       } else {
-        if (r.status === 429) cargarCuota(clave.trim());
+        if (r.status === 429) cargarCuota();
         setPrecios({
           fase: 'error',
           consulta: q,
           vacio: Boolean(datos?.vacio),
-          faltaClave: r.status === 401,
           error: datos?.error || 'No se pudieron traer los precios. Intenta de nuevo.',
         });
       }
@@ -177,34 +169,28 @@ export default function Inicio() {
   }
 
   // Foto -> Google Lens -> candidatos. No busca precios solo: el usuario elige el nombre y confirma.
-  async function identificarFoto(e) {
-    const archivo = e.target.files?.[0];
-    e.target.value = ''; // permite volver a elegir la misma foto
-    if (!archivo) return;
+  async function identificarFoto(foto) {
+    setTomandoFoto(false);
     if (ident.vista) URL.revokeObjectURL(ident.vista);
-    const vista = URL.createObjectURL(archivo);
-    if (!clave.trim()) {
-      setIdent({ fase: 'error', vista, faltaClave: true, error: 'Falta la clave de acceso. Ponla en Ajustes.' });
-      return;
-    }
+    const vista = URL.createObjectURL(foto);
     setIdent({ fase: 'cargando', vista });
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), 30000);
     try {
-      const foto = await reducirImagen(archivo);
+      const reducida = await reducirImagen(foto);
       const r = await fetch('/api/identificar', {
         method: 'POST',
-        headers: { 'content-type': 'image/jpeg', 'x-revende-clave': clave.trim() },
-        body: foto,
+        headers: { 'content-type': 'image/jpeg' },
+        body: reducida,
         signal: control.signal,
       });
       const datos = await r.json().catch(() => null);
       if (r.ok && datos?.ok) {
         setIdent({ fase: 'ok', vista, candidatos: datos.candidatos, precios: datos.precios || [] });
       } else {
-        setIdent({ fase: 'error', vista, faltaClave: r.status === 401, error: datos?.error || 'No se pudo identificar la foto. Intenta de nuevo.' });
+        setIdent({ fase: 'error', vista, error: datos?.error || 'No se pudo identificar la foto. Intenta de nuevo.' });
       }
-      cargarCuota(clave.trim());
+      cargarCuota();
     } catch (err) {
       setIdent({
         fase: 'error',
@@ -215,6 +201,12 @@ export default function Inicio() {
       clearTimeout(reloj);
     }
   }
+
+  const elegirDeGaleria = (e) => {
+    const archivo = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir la misma foto
+    if (archivo) identificarFoto(archivo);
+  };
 
   const cerrarIdent = () => {
     if (ident.vista) URL.revokeObjectURL(ident.vista);
@@ -236,12 +228,6 @@ export default function Inicio() {
     irA('calcular');
   };
 
-  const abrirAjustesClave = () => {
-    irA('ajustes');
-    setTimeout(() => claveRef.current?.focus(), 50);
-  };
-
-  const sinClave = listo && !clave.trim();
 
   return (
     <>
@@ -264,7 +250,7 @@ export default function Inicio() {
                   enterKeyHint="search"
                   onChange={(e) => setBusqueda(e.target.value)}
                 />
-                <button type="button" className="boton-icono" onClick={() => fotoRef.current?.click()} disabled={ident.fase === 'cargando'}>
+                <button type="button" className="boton-icono" onClick={() => setTomandoFoto(true)} disabled={ident.fase === 'cargando'}>
                   <svg viewBox="0 0 24 24" aria-hidden="true">
                     <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
                     <circle cx="12" cy="13" r="3.5" />
@@ -277,12 +263,12 @@ export default function Inicio() {
                   </svg>
                   <span>Código</span>
                 </button>
-                <input ref={fotoRef} type="file" accept="image/*" capture="environment" hidden onChange={identificarFoto} />
+                <input ref={fotoRef} type="file" accept="image/*" hidden onChange={elegirDeGaleria} />
               </form>
             </header>
 
             <section className="bloque">
-              <Identificacion estado={ident} onElegir={elegirCandidato} onCerrar={cerrarIdent} onAbrirAjustes={abrirAjustesClave} />
+              <Identificacion estado={ident} onElegir={elegirCandidato} onCerrar={cerrarIdent} />
               {!q ? (
                 ident.fase === 'inactivo' && (
                   <>
@@ -295,12 +281,14 @@ export default function Inicio() {
                   <button type="button" className="boton boton-buscar" onClick={buscarPrecios} disabled={q.length < 2 || precios.fase === 'cargando'}>
                     {precios.fase === 'cargando' ? 'Buscando…' : 'Buscar precios'}
                   </button>
-                  {cuota && cuota.restantes <= POCAS_BUSQUEDAS && (
-                    <p className="cuota cuota-pocas">Quedan {cuota.restantes} búsquedas este mes.</p>
+                  {cuota && (
+                    <p className={`cuota ${cuota.restantes <= POCAS_BUSQUEDAS ? 'cuota-pocas' : ''}`}>
+                      Quedan {cuota.restantes} búsquedas este mes{cuota.renovacion && ` · se renuevan el ${fechaCorta(cuota.renovacion)}`}
+                    </p>
                   )}
                   {/* Si el texto cambió, el resultado ya no corresponde: se oculta hasta volver a buscar. */}
                   {precios.consulta === q && (
-                    <Precios key={precios.datos?.fecha || precios.fase} estado={precios} onUsar={usarReferencia} onAbrirAjustes={abrirAjustesClave} />
+                    <Precios key={precios.datos?.fecha || precios.fase} estado={precios} onUsar={usarReferencia} />
                   )}
                   {/^\d{8,14}$/.test(q) && (
                     <p className="pista">Es un código de barras: si no salen resultados, búscalo en Google Shopping para saber el modelo y escribe el nombre.</p>
@@ -367,36 +355,18 @@ export default function Inicio() {
           </section>
         )}
 
-        {vista === 'ajustes' && (
-          <section className="bloque pantalla">
-            <h2>Ajustes</h2>
-
-            <div className="ajuste">
-              <h3>Clave de acceso {sinClave && <span className="falta">falta</span>}</h3>
-              <p className="vacio">La necesitas para buscar precios dentro de la app. Se guarda solo en este celular.</p>
-              <div className="campo">
-                <label htmlFor="clave">Clave</label>
-                <div className="entrada">
-                  <input id="clave" ref={claveRef} type="password" autoComplete="off" value={clave} onChange={(e) => setClave(e.target.value)} />
-                </div>
-              </div>
-            </div>
-
-            <div className="ajuste">
-              <h3>Búsquedas de precios</h3>
-              {cuota ? (
-                <p className={cuota.restantes <= POCAS_BUSQUEDAS ? 'cuota-pocas' : ''}>
-                  Te quedan <strong>{cuota.restantes}</strong> de {cuota.mensuales} este mes
-                  {cuota.renovacion && `; se renuevan el ${fechaCorta(cuota.renovacion)}`}.
-                </p>
-              ) : (
-                <p className="vacio">{sinClave ? 'Pon tu clave para ver cuántas te quedan.' : 'Cargando…'}</p>
-              )}
-              <p className="vacio">Repetir una búsqueda el mismo día no gasta.</p>
-            </div>
-          </section>
-        )}
       </main>
+
+      {tomandoFoto && (
+        <CamaraFoto
+          onFoto={identificarFoto}
+          onGaleria={() => {
+            setTomandoFoto(false);
+            fotoRef.current?.click();
+          }}
+          onCerrar={() => setTomandoFoto(false)}
+        />
+      )}
 
       {escaneando && (
         <Escaner
@@ -421,7 +391,6 @@ export default function Inicio() {
               {p.icono}
             </svg>
             <span>{p.nombre}</span>
-            {p.id === 'ajustes' && sinClave && <i className="punto" aria-label="falta la clave" />}
           </button>
         ))}
       </nav>
