@@ -726,3 +726,6 @@ body {
 .barra-etiquetas span:last-child { align-items: flex-end; }
 .barra-etiqueta-tipico { align-items: center; }
 .barra-etiquetas small { font-size: 0.75rem; font-weight: 500; color: var(--tenue); }
+.en-catalogo { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.en-catalogo .ident-subtitulo { margin: 0; }
+.candidato-catalogo { border-color: var(--tinta); background: var(--superficie); }

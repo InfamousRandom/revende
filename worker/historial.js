@@ -144,6 +144,20 @@ async function productoParaReferencias(env, q) {
   };
 }
 
+// Productos de tu catálogo que coinciden con los nombres detectados en una foto (Fase 4).
+// Usa la misma regla estricta de referencias para no sugerir un artículo distinto.
+export async function productosDelCatalogo(env, nombres) {
+  if (!env.DB) return [];
+  const encontrados = new Map();
+  for (const nombre of nombres.filter(Boolean).slice(0, 3)) {
+    const { producto, otros } = await productoParaReferencias(env, normalizar(nombre).slice(0, MAX_TEXTO));
+    for (const p of [producto, ...otros].filter(Boolean)) {
+      if (!encontrados.has(p.id)) encontrados.set(p.id, { id: p.id, nombre: p.nombre });
+    }
+  }
+  return [...encontrados.values()].slice(0, 3);
+}
+
 async function crearProducto(request, env) {
   const c = await leerCuerpo(request);
   const p = {

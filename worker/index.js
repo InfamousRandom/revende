@@ -1,7 +1,7 @@
 // Worker de Revende: sirve la app (archivos de ./out) y las rutas /api.
 import { DurableObject } from 'cloudflare:workers';
 import { json, normalizar, verificarOrigen } from './util.js';
-import { historial, esRutaHistorial } from './historial.js';
+import { historial, esRutaHistorial, productosDelCatalogo } from './historial.js';
 const MODELO_DEFECTO = 'gemini-3-flash-preview';
 
 const instrucciones = (consulta) => `Eres un asistente para una persona que compra y revende articulos en Mexico.
@@ -444,7 +444,9 @@ async function identificar(request, env) {
     const sugerido = nombreSugerido(datos) || candidatos[0];
     // Las demás opciones, por si el nombre elegido no es el correcto.
     const otros = candidatos.filter((c) => normalizar(c) !== normalizar(sugerido)).slice(0, 4);
-    return json({ ok: true, sugerido, candidatos: otros, precios: preciosDeLens(datos) });
+    // Lo que ya tienes registrado con un nombre parecido (no gasta búsquedas; si falla, se omite).
+    const catalogo = await productosDelCatalogo(env, [sugerido, ...otros]).catch(() => []);
+    return json({ ok: true, sugerido, candidatos: otros, catalogo, precios: preciosDeLens(datos) });
   } finally {
     await foto.borrar();
   }

@@ -51,6 +51,16 @@ export default function Identificacion({ estado, onElegir, onCerrar }) {
 
       {estado.fase === 'ok' && (
         <>
+          {estado.catalogo?.length > 0 && (
+            <div className="en-catalogo">
+              <h3 className="ident-subtitulo">En tu historial</h3>
+              {estado.catalogo.map((p) => (
+                <button key={p.id} type="button" className="candidato candidato-catalogo" onClick={() => onElegir(p.nombre)}>
+                  {p.nombre}
+                </button>
+              ))}
+            </div>
+          )}
           {estado.candidatos.length > 0 && (
             <details className="mas-detalles">
               <summary>¿No es? Ver otras opciones ({estado.candidatos.length})</summary>

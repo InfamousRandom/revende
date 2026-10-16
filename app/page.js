@@ -221,7 +221,7 @@ export default function Inicio() {
       });
       const datos = await r.json().catch(() => null);
       if (r.ok && datos?.ok) {
-        setIdent({ fase: 'ok', vista, sugerido: datos.sugerido, candidatos: datos.candidatos || [], precios: datos.precios || [] });
+        setIdent({ fase: 'ok', vista, sugerido: datos.sugerido, candidatos: datos.candidatos || [], catalogo: datos.catalogo || [], precios: datos.precios || [] });
         // El nombre con más coincidencias va al buscador y se buscan sus precios de una vez (pedido de
         // Pablo): cada foto gasta 2 búsquedas, una de Lens y una de Google Shopping.
         if (datos.sugerido) {

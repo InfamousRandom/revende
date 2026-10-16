@@ -171,8 +171,10 @@ catálogo de la Fase 3.
 - [x] Después de la foto se buscan los precios solos (pedido de Pablo): 2 búsquedas por foto.
 - [x] Tarjeta de precios más visual: foto del producto, miniatura por oferta y barra de precios
       (más barato, típico, más caro, un punto por oferta). Cache `precios3` por el cambio de formato.
-- [ ] Al mostrar candidatos de la foto, incluir también productos de mi catálogo que coincidan.
-- [ ] Al confirmar un candidato, mostrar precios y mi historial de ese producto.
+- [x] Al mostrar candidatos de la foto, incluir también productos de mi catálogo que coincidan
+      ("En tu historial", `productosDelCatalogo` con la regla estricta del 60 % de palabras).
+- [x] Al confirmar un candidato, mostrar precios y mi historial de ese producto (precios automáticos
+      + tarjeta "Tus ventas").
 - Notas: candidatos salen de `related_content` de Lens (nombres limpios) y de títulos de
   coincidencias; tocar un candidato llena el buscador y NO busca precios solo (cuida la cuota).
 
