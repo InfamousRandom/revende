@@ -16,7 +16,7 @@ Plan por fases y tareas: `docs/PLAN.md`. Léelo antes de empezar cualquier tarea
   - `POST /api/analizar`: consulta Gemini con búsqueda de Google. **Inactivo**: la cuenta de
     Google está en prepago y responde 402 hasta que se compren créditos. No borrarlo; no es la ruta
     principal.
-- Fase 2A en local (commits en `main`, aún sin push):
+- Fase 2A en producción (2026-10-16):
   - `POST /api/precios`: SerpApi Google Shopping, filtros y cache KV `CACHE` (24 h).
   - `GET /api/cuota`: búsquedas restantes de SerpApi (consultar la cuenta no gasta búsquedas).
   - App: botón "Buscar precios", tarjeta de resultados, clave de acceso en Ajustes.
@@ -53,7 +53,7 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 | --- | --- | --- |
 | `REVENDE_CLAVE` | Clave que la app manda en el encabezado `x-revende-clave` | Configurado |
 | `GEMINI_API_KEY` | Gemini (ruta inactiva) | Configurado |
-| `SERPAPI_KEY` | Google Shopping y Google Lens vía SerpApi | Pendiente (lo agrega el usuario) |
+| `SERPAPI_KEY` | Google Shopping y Google Lens vía SerpApi | Configurado |
 
 ## Decisiones tomadas (y por qué)
 

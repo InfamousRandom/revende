@@ -14,7 +14,7 @@ Las tareas marcadas **(Pablo)** las hace el usuario en el navegador; Claude Code
 Objetivo: escribir o escanear un artículo y ver dentro de la app el rango de precio nuevo y las
 mejores ofertas, sin salir a otras páginas.
 
-- [ ] **(Pablo)** Crear cuenta gratis en serpapi.com y guardar la llave en Cloudflare como Secret `SERPAPI_KEY`.
+- [x] **(Pablo)** Crear cuenta gratis en serpapi.com y guardar la llave en Cloudflare como Secret `SERPAPI_KEY`.
 - [x] **(Pablo)** Crear un namespace KV llamado `revende-cache` (Cloudflare → Storage & Databases → KV)
       y pasar su ID para agregarlo a `wrangler.jsonc`. Alternativa: `npx wrangler kv namespace create revende-cache`.
 - [x] Binding KV `CACHE` en `wrangler.jsonc`.
