@@ -101,21 +101,17 @@ async function analizar(request, env) {
 // ---------- /api/precios: precios de nuevo con SerpApi (Google Shopping, Mexico) ----------
 
 const CACHE_SEGUNDOS = 24 * 60 * 60;
-const UMBRAL_ACCESORIO = 0.35; // menos del 35 % de la mediana: casi seguro accesorio o producto distinto
-const UMBRAL_ALTO = 2; // mas del doble de la mediana: bundle, edicion especial u otro producto
+const VERSION_CACHE = 'precios2'; // cambia si cambia la forma de la respuesta
+const UMBRAL_BAJO = 0.35; // menos del 35 % de la mediana: casi seguro accesorio o producto distinto
+const UMBRAL_ALTO = 2; // mas del doble de la mediana: paquete, edicion especial u otro producto
 const PALABRAS_ACCESORIO = [
   'funda', 'case', 'carcasa', 'mica', 'protector', 'skin', 'sticker', 'calcomania', 'vinil',
   'cargador', 'cable', 'base de carga', 'soporte', 'estuche', 'repuesto', 'refaccion', 'adaptador',
-  // Paquetes y ediciones especiales: no son el articulo base.
+];
+const PALABRAS_PAQUETE = [
   'bundle', 'paquete', 'pack', 'combo', 'kit', 'aniversario', 'edicion limitada', 'limited edition',
   'mas', 'incluye', 'incluido', 'juego', 'juegos',
 ];
-// Tiendas fuera de Mexico o de vendedores particulares: no sirven como precio de nuevo en MX.
-const TIENDAS_EXCLUIDAS = /^ebay\b/i;
-
-// "mercadolibre.com.mx", "Mercado Libre" y "Amazon MX" -> misma tienda.
-const claveTienda = (tienda) =>
-  normalizar(tienda).replace(/\.com(\.mx)?$|\.mx$/, '').replace(/[^a-z0-9]/g, '').replace(/mx$/, '');
 
 const normalizar = (texto) =>
   texto.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/\s+/g, ' ').trim();
@@ -134,42 +130,58 @@ function verificarClave(request, env) {
   return null;
 }
 
-// Convierte un resultado de SerpApi en oferta; null si no sirve (sin precio, sin tienda o sin link).
+// Convierte un resultado de SerpApi en oferta; null solo si no se puede mostrar (sin precio, tienda o link).
 function aOferta(r) {
-  if (r.second_hand_condition) return null; // usado o reacondicionado: no es precio de nuevo
   const precio = typeof r.extracted_price === 'number' ? Math.round(r.extracted_price) : null;
   const link = r.link || r.product_link || '';
   const tienda = (r.source || '').trim();
-  if (!precio || precio <= 0 || !link || !tienda || !r.title || TIENDAS_EXCLUIDAS.test(tienda)) return null;
-  return { titulo: r.title.trim(), tienda, precio, link, miniatura: r.thumbnail || '' };
+  if (!precio || precio <= 0 || !link || !tienda || !r.title) return null;
+  const condicion = normalizar(r.second_hand_condition || '');
+  return {
+    titulo: r.title.trim(),
+    tienda,
+    precio,
+    link,
+    usado: Boolean(condicion),
+    condicion: condicion.includes('reacond') || condicion.includes('renov') ? 'Reacondicionado' : condicion ? 'Usado' : 'Nuevo',
+  };
 }
 
-function filtrarOfertas(resultados, consulta) {
+// Marca (no quita) lo que parece accesorio, paquete o precio fuera de lo normal.
+function marcarAtipicos(ofertas, consulta) {
   const consultaNorm = normalizar(consulta);
-  // Solo descarta por palabra si el usuario no la busco (ej. "funda iphone" si debe mostrar fundas).
-  const palabras = PALABRAS_ACCESORIO.filter((p) => !consultaNorm.includes(p));
-  const esAccesorio = (titulo) => {
-    const t = ` ${normalizar(titulo).replace(/[^a-z0-9+]+/g, ' ')} `;
-    // Un "+" en el titulo casi siempre es paquete ("PS5 + juego"), salvo que se haya buscado asi.
-    if (!consultaNorm.includes('+') && t.includes('+')) return true;
-    return palabras.some((p) => t.includes(` ${p} `) || t.includes(` ${p}s `) || t.includes(` ${p}es `));
-  };
+  const sinBuscar = (lista) => lista.filter((p) => !consultaNorm.includes(p));
+  const accesorios = sinBuscar(PALABRAS_ACCESORIO);
+  const paquetes = sinBuscar(PALABRAS_PAQUETE);
+  const tiene = (t, lista) => lista.some((p) => t.includes(` ${p} `) || t.includes(` ${p}s `) || t.includes(` ${p}es `));
 
-  let ofertas = resultados.map(aOferta).filter(Boolean).filter((o) => !esAccesorio(o.titulo));
-
-  // Una oferta por tienda: la mas barata.
-  const porTienda = new Map();
   for (const o of ofertas) {
-    const clave = claveTienda(o.tienda);
-    if (!porTienda.has(clave) || o.precio < porTienda.get(clave).precio) porTienda.set(clave, o);
+    const t = ` ${normalizar(o.titulo).replace(/[^a-z0-9+]+/g, ' ')} `;
+    if (tiene(t, accesorios)) o.aviso = 'Parece accesorio';
+    // Un "+" en el titulo casi siempre es paquete ("PS5 + juego"), salvo que se haya buscado asi.
+    else if (tiene(t, paquetes) || (!consultaNorm.includes('+') && t.includes('+'))) o.aviso = 'Parece paquete';
   }
-  ofertas = [...porTienda.values()];
+  const normales = ofertas.filter((o) => !o.aviso);
+  if (normales.length >= 3) {
+    const m = mediana(normales.map((o) => o.precio));
+    for (const o of normales) {
+      if (o.precio < m * UMBRAL_BAJO) o.aviso = 'Precio muy bajo';
+      else if (o.precio > m * UMBRAL_ALTO) o.aviso = 'Precio muy alto';
+    }
+  }
+  return ofertas;
+}
 
-  if (ofertas.length >= 3) {
-    const m = mediana(ofertas.map((o) => o.precio));
-    ofertas = ofertas.filter((o) => o.precio >= m * UMBRAL_ACCESORIO && o.precio <= m * UMBRAL_ALTO);
-  }
-  return ofertas.sort((a, b) => a.precio - b.precio);
+// Lista ordenada (normales primero, luego las marcadas) y rango calculado sin las marcadas.
+function resumir(ofertas) {
+  const porPrecio = (a, b) => a.precio - b.precio;
+  const normales = ofertas.filter((o) => !o.aviso).sort(porPrecio);
+  const marcadas = ofertas.filter((o) => o.aviso).sort(porPrecio);
+  const precios = normales.map((o) => o.precio);
+  return {
+    rango: precios.length ? { min: precios[0], mediana: mediana(precios), max: precios[precios.length - 1] } : null,
+    ofertas: [...normales, ...marcadas],
+  };
 }
 
 async function buscarSerpApi(consulta, env) {
@@ -203,7 +215,7 @@ async function precios(request, env) {
     return json({ ok: false, error: 'Escribe el artículo (entre 2 y 120 caracteres)' }, 400);
   }
 
-  const claveCache = `precios:${normalizar(consulta)}`;
+  const claveCache = `${VERSION_CACHE}:${normalizar(consulta)}`;
   if (env.CACHE) {
     const guardado = await env.CACHE.get(claveCache, 'json');
     if (guardado) return json({ ...guardado, cache: true });
@@ -225,22 +237,32 @@ async function precios(request, env) {
   }
 
   const crudos = [...(datos.shopping_results || []), ...(datos.inline_shopping_results || [])];
-  const ofertas = filtrarOfertas(crudos, consulta);
+  // Solo se quitan repetidos exactos (mismo resultado en dos bloques de Google).
+  const vistos = new Set();
+  const ofertas = crudos.map(aOferta).filter((o) => {
+    if (!o) return false;
+    const clave = `${o.tienda}|${o.precio}|${o.titulo}`;
+    if (vistos.has(clave)) return false;
+    vistos.add(clave);
+    return true;
+  });
 
   if (!ofertas.length) {
     // No se cachea: puede ser un error de escritura y el usuario lo corregira.
     return json({ ok: false, vacio: true, error: 'No se encontraron precios para ese artículo. Prueba con otro nombre o modelo.' }, 404);
   }
 
-  const lista = ofertas.map((o) => o.precio);
-  const m = mediana(lista);
+  const nuevos = resumir(marcarAtipicos(ofertas.filter((o) => !o.usado), consulta));
+  const usados = resumir(marcarAtipicos(ofertas.filter((o) => o.usado), consulta));
+
   // Nombre del producto: el titulo que contiene mas palabras de la consulta; si empatan, el mas corto.
   const palabrasConsulta = normalizar(consulta).split(' ');
   const parecido = (o) => {
     const t = normalizar(o.titulo);
     return palabrasConsulta.filter((p) => t.includes(p)).length;
   };
-  const representativa = ofertas.reduce((a, b) => {
+  const candidatas = ofertas.filter((o) => !o.aviso);
+  const representativa = (candidatas.length ? candidatas : ofertas).reduce((a, b) => {
     const diferencia = parecido(b) - parecido(a);
     return diferencia > 0 || (diferencia === 0 && b.titulo.length < a.titulo.length) ? b : a;
   });
@@ -249,8 +271,9 @@ async function precios(request, env) {
     ok: true,
     consulta,
     producto: representativa.titulo,
-    rango: { min: lista[0], mediana: m, max: lista[lista.length - 1] },
-    ofertas: ofertas.slice(0, 5),
+    nuevos,
+    usados,
+    tiendas: new Set(ofertas.map((o) => o.tienda)).size,
     total: ofertas.length,
     fecha: new Date().toISOString(),
   };

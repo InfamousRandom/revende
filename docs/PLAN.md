@@ -29,12 +29,15 @@ mejores ofertas, sin salir a otras páginas.
   - Nota: SerpApi ya no da el link directo de la tienda en Google Shopping, solo la ficha de
     Google (`product_link`), que muestra esa oferta con su tienda. El link directo costaría una
     búsqueda extra por oferta; por ahora no.
-  - Filtros además de la mediana: usados/reacondicionados, eBay, títulos con paquete/bundle/"+"/
-    juego/edición especial (salvo que la consulta los incluya), y una oferta por tienda.
+  - Ya no se quita nada (pedido de Pablo): todo se devuelve separado en `nuevos` y `usados`, cada
+    uno con su `rango`. Se marca con `aviso` (no se quita) lo que parece accesorio, paquete
+    (bundle/"+"/juego/edición especial, salvo que la consulta lo incluya) o precio < 35 % o > 200 %
+    de la mediana; lo marcado no cuenta para el rango.
 - [x] Pantalla de resultados en la app:
   - Botón "Buscar precios" (no busca mientras se escribe).
-  - Tarjeta con rango nuevo, lista de 4-5 ofertas (tienda, precio, link pequeño para verificar).
-  - Botón "Usar como referencia" que lleva un valor a la calculadora.
+  - Tarjeta con precio típico de nuevo y de usado lado a lado, y listas completas de nuevos y
+    usados (6 visibles + "Ver los N"); marcados en gris los paquetes/accesorios/atípicos.
+  - Botón "Usar precio" en cada resumen que lleva ese valor a la calculadora.
   - Estados de carga, vacío y error.
 - [x] Ajustes: campo "Clave de acceso" guardado en el celular; aviso si falta.
 - [x] Mostrar búsquedas de SerpApi restantes del mes (`GET /api/cuota` → `serpapi.com/account.json`,
@@ -65,7 +68,7 @@ candidatos y lleva a sus precios con dos toques.
 Todo en el celular (IndexedDB), sin servidor.
 
 - [ ] Registrar compra: artículo, fecha, precio, canal donde piensa vender, notas.
-- [ ] Registrar venta: precio, fecha, canal, comisión y envío reales.
+- [ ] Registrar venta: precio, fecha, dónde (en persona o Marketplace) y gastos reales.
 - [ ] Inventario: artículos sin vender, días en inventario, dinero invertido.
 - [ ] Resumen: ganancia real, margen real, días promedio para vender, por artículo y total.
 - [ ] Captura rápida de precio usado (Marketplace, ML usado, otro): precio, condición, fecha, link opcional.

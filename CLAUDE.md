@@ -10,7 +10,7 @@ Plan por fases y tareas: `docs/PLAN.md`. Léelo antes de empezar cualquier tarea
 
 - Fase 1 en producción: https://revende.molinapablo990.workers.dev
   - Buscador + escáner de código de barras (html5-qrcode), botones a tiendas, calculadora de
-    precio máximo, comisiones por canal guardadas en localStorage.
+    precio máximo (precio de venta, gastos y ganancia buscada; sin comisiones).
 - Worker en `worker/index.js` con:
   - `GET /api/salud`: indica qué secretos están configurados (sin mostrarlos).
   - `POST /api/analizar`: consulta Gemini con búsqueda de Google. **Inactivo**: la cuenta de
@@ -78,8 +78,11 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 - Cuidar la cuota de SerpApi: cachear resultados en KV por consulta normalizada (24 h) y no
   repetir búsquedas automáticas. Nunca disparar búsquedas al escribir; solo al confirmar.
 - Nunca mostrar un precio sin su fuente (tienda + link). Nunca inventar ni estimar precios.
-- Filtrar accesorios, fundas y productos distintos antes de calcular rangos (mediana, mín, máx).
-- Mostrar solo lo útil: artículo, rango, 4-5 mejores ofertas, calculadora. Nada de datos crudos.
+- Pablo vende en persona o por Marketplace: no hay comisiones ni canales de venta. No volver a agregarlos.
+- Resultados sin ocultar (decisión de Pablo, 2026-10-16): mostrar todos los resultados de Google
+  Shopping de todas las tiendas, separados en nuevos y usados/reacondicionados. Lo que parece
+  accesorio, paquete o precio fuera de lo normal se muestra marcado en gris, al final, y no cuenta
+  para el rango (mediana, mín, máx). Nunca quitar resultados de la lista.
 - Móvil primero: botones grandes, una mano, legible al sol, modo claro y oscuro.
 - Mantener el lenguaje visual actual (etiqueta amarilla, tipografías, variables de color).
 - Cambios pequeños y probados con `npx wrangler dev` antes de hacer commit. Preguntar antes de

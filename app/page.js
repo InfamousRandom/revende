@@ -41,14 +41,6 @@ const GRUPOS = [
   },
 ];
 
-// ---------- Canales de venta: comisión y envío los capturas tú ----------
-const CANALES_INICIALES = [
-  { id: 'ml', nombre: 'Mercado Libre', comision: '', envio: '' },
-  { id: 'marketplace', nombre: 'Marketplace', comision: '0', envio: '0' },
-  { id: 'directo', nombre: 'Venta directa', comision: '0', envio: '0' },
-];
-
-const CLAVE_CANALES = 'revende:canales';
 const CLAVE_CALC = 'revende:calculadora';
 const CLAVE_ACCESO = 'revende:clave';
 const ESPERA_MAXIMA_MS = 20000;
@@ -82,8 +74,8 @@ const pct = (n) => `${Math.round(n * 100)}%`;
 export default function Inicio() {
   const [busqueda, setBusqueda] = useState('');
   const [escaneando, setEscaneando] = useState(false);
-  const [canales, setCanales] = useState(CANALES_INICIALES);
-  const [calc, setCalc] = useState({ venta: '', canal: 'marketplace', envio: '0', otros: '', margen: '20', compra: '' });
+  // Venta en persona o Marketplace: sin comisión. Solo gastos propios (gasolina, envío, limpieza).
+  const [calc, setCalc] = useState({ venta: '', gastos: '', margen: '20', compra: '' });
   const [listo, setListo] = useState(false);
   const [clave, setClave] = useState('');
   const [precios, setPrecios] = useState({ fase: 'inactivo' });
@@ -93,17 +85,13 @@ export default function Inicio() {
 
   // Cargar lo guardado en este celular
   useEffect(() => {
-    setCanales(leer(CLAVE_CANALES, CANALES_INICIALES));
-    setCalc((c) => ({ ...c, ...leer(CLAVE_CALC, {}) }));
+    setCalc((c) => ({ ...c, margen: leer(CLAVE_CALC, {}).margen ?? c.margen }));
     setClave(leer(CLAVE_ACCESO, ''));
     setListo(true);
   }, []);
   useEffect(() => {
-    if (listo) guardar(CLAVE_CANALES, canales);
-  }, [canales, listo]);
-  useEffect(() => {
-    if (listo) guardar(CLAVE_CALC, { canal: calc.canal, margen: calc.margen });
-  }, [calc.canal, calc.margen, listo]);
+    if (listo) guardar(CLAVE_CALC, { margen: calc.margen });
+  }, [calc.margen, listo]);
   useEffect(() => {
     if (listo) guardar(CLAVE_ACCESO, clave.trim());
   }, [clave, listo]);
@@ -121,29 +109,17 @@ export default function Inicio() {
     if (listo) cargarCuota(leer(CLAVE_ACCESO, '').trim());
   }, [listo]);
 
-  const canal = canales.find((c) => c.id === calc.canal) || canales[0];
-  const sinComision = canal.comision === '';
-
   const set = (campo) => (e) => setCalc((c) => ({ ...c, [campo]: e.target.value }));
-  const elegirCanal = (id) => {
-    const nuevo = canales.find((c) => c.id === id);
-    setCalc((c) => ({ ...c, canal: id, envio: nuevo?.envio ?? '0' }));
-  };
-  const editarCanal = (id, campo, valor) =>
-    setCanales((cs) => cs.map((c) => (c.id === id ? { ...c, [campo]: valor } : c)));
 
   const r = useMemo(() => {
     const V = num(calc.venta);
-    const c = num(canal.comision) / 100;
-    const e = num(calc.envio);
-    const o = num(calc.otros);
     const m = num(calc.margen) / 100;
     const compra = num(calc.compra);
-    const neto = V * (1 - c) - e - o; // lo que te queda después de comisión y gastos
+    const neto = V - num(calc.gastos); // lo que te queda después de tus gastos
     const maximo = neto - V * m;
     const ganancia = neto - compra;
     return { V, neto, maximo, ganancia, margenReal: V > 0 ? ganancia / V : 0, hayCompra: compra > 0 };
-  }, [calc, canal]);
+  }, [calc]);
 
   const q = busqueda.trim();
 
@@ -253,7 +229,7 @@ export default function Inicio() {
               </p>
             )}
             {/* Si el texto cambió, el resultado ya no corresponde: se oculta hasta volver a buscar. */}
-            {precios.consulta === q && <Precios estado={precios} onUsar={usarReferencia} onAbrirAjustes={abrirAjustesClave} />}
+            {precios.consulta === q && <Precios key={precios.datos?.fecha || precios.fase} estado={precios} onUsar={usarReferencia} onAbrirAjustes={abrirAjustesClave} />}
             <h3 className="subtitulo">Ver en cada tienda</h3>
             {GRUPOS.map((g) => (
               <div key={g.titulo} className="grupo">
@@ -278,28 +254,11 @@ export default function Inicio() {
       <section className="bloque" aria-labelledby="t-calc" ref={calcRef}>
         <h2 id="t-calc">¿Cuánto pagar?</h2>
 
-        <fieldset className="canales">
-          <legend>Dónde lo vas a vender</legend>
-          {canales.map((c) => (
-            <label key={c.id} className={`canal ${calc.canal === c.id ? 'activo' : ''}`}>
-              <input type="radio" name="canal" value={c.id} checked={calc.canal === c.id} onChange={() => elegirCanal(c.id)} />
-              {c.nombre}
-            </label>
-          ))}
-        </fieldset>
-
         <div className="campos">
           <Campo id="venta" etiqueta="Precio de venta esperado" prefijo="$" valor={calc.venta} onChange={set('venta')} grande />
-          <Campo id="envio" etiqueta="Envío" prefijo="$" valor={calc.envio} onChange={set('envio')} />
-          <Campo id="otros" etiqueta="Otros gastos" prefijo="$" valor={calc.otros} onChange={set('otros')} ayuda="Limpieza, refacción, retenciones" />
+          <Campo id="gastos" etiqueta="Tus gastos" prefijo="$" valor={calc.gastos} onChange={set('gastos')} ayuda="Gasolina, envío, limpieza" />
           <Campo id="margen" etiqueta="Ganancia que buscas" sufijo="%" valor={calc.margen} onChange={set('margen')} ayuda="Sobre el precio de venta" />
         </div>
-
-        {sinComision && (
-          <p className="aviso">
-            Falta la comisión de {canal.nombre}. Captúrala en “Comisiones por canal”, abajo; mientras tanto se calcula como 0%.
-          </p>
-        )}
 
         <div className={`etiqueta ${r.V > 0 && r.maximo <= 0 ? 'etiqueta-no' : ''}`} aria-live="polite">
           {r.V <= 0 ? (
@@ -309,14 +268,14 @@ export default function Inicio() {
               <span className="etiqueta-titulo">Paga máximo</span>
               <span className="etiqueta-cifra">{pesos.format(Math.floor(r.maximo))}</span>
               <span className="etiqueta-detalle">
-                Te quedan {pesos.format(r.neto)} después de comisión y gastos; así ganas al menos {calc.margen || 0}%.
+                Te quedan {pesos.format(r.neto)} después de tus gastos; así ganas al menos {calc.margen || 0}%.
               </span>
             </>
           ) : (
             <>
               <span className="etiqueta-titulo">No conviene</span>
               <span className="etiqueta-detalle">
-                A {pesos.format(r.V)} la comisión y los gastos se comen el margen que buscas. Baja tu margen o busca un mejor precio de venta.
+                A {pesos.format(r.V)} los gastos se comen el margen que buscas. Baja tu margen o busca un mejor precio de venta.
               </span>
             </>
           )}
@@ -330,17 +289,6 @@ export default function Inicio() {
         )}
       </section>
 
-      <details className="bloque ajustes">
-        <summary>Comisiones por canal</summary>
-        <p className="vacio">Se guardan solo en este celular. Pon la comisión real que te cobran y tu envío típico.</p>
-        {canales.map((c) => (
-          <div key={c.id} className="ajuste-canal">
-            <span className="ajuste-nombre">{c.nombre}</span>
-            <Campo id={`com-${c.id}`} etiqueta="Comisión" sufijo="%" valor={c.comision} onChange={(e) => editarCanal(c.id, 'comision', e.target.value)} />
-            <Campo id={`env-${c.id}`} etiqueta="Envío típico" prefijo="$" valor={c.envio} onChange={(e) => editarCanal(c.id, 'envio', e.target.value)} />
-          </div>
-        ))}
-      </details>
 
       <details className="bloque ajustes" ref={ajustesClaveRef}>
         <summary>Clave de acceso {!clave.trim() && listo && <span className="falta">falta</span>}</summary>
