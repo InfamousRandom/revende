@@ -184,6 +184,24 @@ function resumir(ofertas) {
   };
 }
 
+// Respuesta de error clara si SerpApi fallo; null si se puede seguir ("sin resultados" no es error).
+function errorDeSerpApi(status, datos) {
+  const errorSerp = String(datos.error || '');
+  if (status === 401 || /invalid api key/i.test(errorSerp)) {
+    return json({ ok: false, error: 'La llave de SerpApi no es válida' }, 502);
+  }
+  if (status === 429 || /run out of searches|limit/i.test(errorSerp)) {
+    return json({ ok: false, error: 'Se acabaron las búsquedas de este mes (o de esta hora). Intenta más tarde.' }, 429);
+  }
+  if (errorSerp && !/hasn't returned any results/i.test(errorSerp)) {
+    return json({ ok: false, error: 'El servicio de búsqueda falló. Intenta de nuevo.', detalle: errorSerp.slice(0, 200) }, 502);
+  }
+  if (status >= 400 && !errorSerp) {
+    return json({ ok: false, error: `El servicio de búsqueda respondió ${status}` }, 502);
+  }
+  return null;
+}
+
 async function buscarSerpApi(consulta, env) {
   const params = new URLSearchParams({
     engine: 'google_shopping',
@@ -222,19 +240,8 @@ async function precios(request, env) {
   }
 
   const { status, datos } = await buscarSerpApi(consulta, env);
-  const errorSerp = String(datos.error || '');
-  if (status === 401 || /invalid api key/i.test(errorSerp)) {
-    return json({ ok: false, error: 'La llave de SerpApi no es válida' }, 502);
-  }
-  if (status === 429 || /run out of searches|limit/i.test(errorSerp)) {
-    return json({ ok: false, error: 'Se acabaron las búsquedas de precios de este mes (o de esta hora). Intenta más tarde.' }, 429);
-  }
-  if (errorSerp && !/hasn't returned any results/i.test(errorSerp)) {
-    return json({ ok: false, error: 'El servicio de precios falló. Intenta de nuevo.', detalle: errorSerp.slice(0, 200) }, 502);
-  }
-  if (status >= 400 && !errorSerp) {
-    return json({ ok: false, error: `El servicio de precios respondió ${status}` }, 502);
-  }
+  const fallo = errorDeSerpApi(status, datos);
+  if (fallo) return fallo;
 
   const crudos = [...(datos.shopping_results || []), ...(datos.inline_shopping_results || [])];
   // Solo se quitan repetidos exactos (mismo resultado en dos bloques de Google).
@@ -281,6 +288,107 @@ async function precios(request, env) {
   return json({ ...respuesta, cache: false });
 }
 
+// ---------- /api/identificar: nombre del articulo a partir de una foto (SerpApi + Google Lens) ----------
+
+const IMAGEN_SEGUNDOS = 10 * 60; // la foto vive maximo 10 minutos y se borra al terminar
+const IMAGEN_MAX_BYTES = 2 * 1024 * 1024;
+const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
+const ID_IMAGEN = /^[a-f0-9]{32}$/;
+
+// Quita el "relleno" tipico de los titulos de tienda: "... | MercadoLibre", "... : Amazon.com.mx: ...", "...".
+const limpiarTitulo = (t) =>
+  t
+    .split(/\s[|:]\s|\s[-–]\s(?=[^-–]*$)/)[0]
+    .replace(/\s*(\.\.\.|…)\s*$/, '')
+    .replace(/[\s:|,–-]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+function candidatosDeLens(d) {
+  const nombres = [];
+  const vistos = new Set();
+  const agregar = (texto) => {
+    const limpio = limpiarTitulo(String(texto || ''));
+    const clave = normalizar(limpio);
+    if (limpio.length < 3 || limpio.length > 90 || vistos.has(clave)) return;
+    vistos.add(clave);
+    nombres.push(limpio);
+  };
+  // 1) Busquedas relacionadas de Google: nombres limpios ("PlayStation 5 Slim").
+  for (const r of d.related_content || []) agregar(r.query);
+  // 2) Titulos de coincidencias en tiendas (los que traen precio primero).
+  const coincidencias = d.visual_matches || [];
+  for (const m of coincidencias.filter((m) => m.price)) agregar(m.title);
+  for (const m of coincidencias.slice(0, 10)) agregar(m.title);
+  return nombres.slice(0, 5);
+}
+
+function preciosDeLens(d) {
+  return (d.visual_matches || [])
+    .filter((m) => m.price?.extracted_value > 0 && m.link && m.source && /mxn|\$/i.test(m.price.value || ''))
+    .slice(0, 4)
+    .map((m) => ({ titulo: limpiarTitulo(m.title || ''), tienda: m.source, precio: Math.round(m.price.extracted_value), link: m.link }));
+}
+
+async function buscarLens(urlImagen, env) {
+  const params = new URLSearchParams({ engine: 'google_lens', url: urlImagen, country: 'mx', hl: 'es', api_key: env.SERPAPI_KEY });
+  const r = await fetch(`https://serpapi.com/search.json?${params}`);
+  let datos = {};
+  try {
+    datos = await r.json();
+  } catch {}
+  return { status: r.status, datos };
+}
+
+async function identificar(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
+  const sinPermiso = verificarClave(request, env);
+  if (sinPermiso) return sinPermiso;
+  if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
+  if (!env.CACHE) return json({ ok: false, error: 'Falta configurar el almacenamiento temporal (KV)' }, 500);
+
+  const tipo = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!TIPOS_IMAGEN.includes(tipo)) return json({ ok: false, error: 'Manda una foto (JPG, PNG o WebP)' }, 415);
+  const imagen = await request.arrayBuffer();
+  if (!imagen.byteLength) return json({ ok: false, error: 'La foto llegó vacía. Intenta de nuevo.' }, 400);
+  if (imagen.byteLength > IMAGEN_MAX_BYTES) return json({ ok: false, error: 'La foto es demasiado grande' }, 413);
+
+  // Lens necesita la foto en una URL publica: se guarda unos minutos con un ID imposible de adivinar.
+  const id = crypto.randomUUID().replace(/-/g, '');
+  const claveImagen = `img:${id}`;
+  await env.CACHE.put(claveImagen, imagen, { expirationTtl: IMAGEN_SEGUNDOS, metadata: { tipo } });
+  const urlImagen = `${new URL(request.url).origin}/api/img/${id}`;
+
+  try {
+    let { status, datos } = await buscarLens(urlImagen, env);
+    // Si Lens no pudo descargar la foto (puede tardar en propagarse), un reintento.
+    if (/url|image|fetch|download/i.test(String(datos.error || ''))) {
+      await new Promise((listo) => setTimeout(listo, 1500));
+      ({ status, datos } = await buscarLens(urlImagen, env));
+    }
+    const fallo = errorDeSerpApi(status, datos);
+    if (fallo) return fallo;
+
+    const candidatos = candidatosDeLens(datos);
+    if (!candidatos.length) {
+      return json({ ok: false, vacio: true, error: 'No se reconoció el artículo. Prueba con la etiqueta, la caja o el número de modelo.' }, 404);
+    }
+    return json({ ok: true, candidatos, precios: preciosDeLens(datos) });
+  } finally {
+    await env.CACHE.delete(claveImagen);
+  }
+}
+
+// Ruta publica temporal para que Google Lens descargue la foto. Solo IDs validos y vigentes.
+async function servirImagen(id, env) {
+  if (!ID_IMAGEN.test(id) || !env.CACHE) return new Response('No encontrada', { status: 404 });
+  const { value, metadata } = await env.CACHE.getWithMetadata(`img:${id}`, 'arrayBuffer');
+  if (!value) return new Response('No encontrada', { status: 404 });
+  return new Response(value, {
+    headers: { 'content-type': metadata?.tipo || 'image/jpeg', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' },
+  });
+}
+
 // ---------- /api/cuota: busquedas restantes de SerpApi (consultar la cuenta no gasta busquedas) ----------
 
 async function cuota(request, env) {
@@ -319,6 +427,18 @@ export default {
         serpapi: Boolean(env.SERPAPI_KEY),
         cache: Boolean(env.CACHE),
       });
+    }
+
+    if (url.pathname.startsWith('/api/img/')) {
+      return servirImagen(url.pathname.slice('/api/img/'.length), env);
+    }
+
+    if (url.pathname === '/api/identificar') {
+      try {
+        return await identificar(request, env);
+      } catch (e) {
+        return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+      }
     }
 
     if (url.pathname === '/api/cuota') {

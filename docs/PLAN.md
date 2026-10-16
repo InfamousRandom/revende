@@ -48,17 +48,22 @@ tienda y link, sin accesorios; una segunda búsqueda igual sale de cache.
 
 ## Fase 2B: identificar por foto (SerpApi + Google Lens)
 
-- [ ] Botón "Foto" que abre la cámara (`input type=file accept=image/* capture=environment`).
-- [ ] Reducir la imagen en el celular (~1024 px, JPEG) antes de enviarla.
-- [ ] `POST /api/identificar`:
+- [x] Botón "Foto" que abre la cámara (`input type=file accept=image/* capture=environment`).
+- [x] Reducir la imagen en el celular (~1024 px, JPEG) antes de enviarla.
+- [x] `POST /api/identificar`:
   - Guarda la imagen en KV con ID aleatorio y TTL de 10 minutos.
   - Ruta pública temporal `GET /api/img/:id` que la sirve (solo IDs válidos y vigentes).
   - Llama a SerpApi `engine=google_lens`, `url`, `country=mx`.
   - Devuelve 3 nombres candidatos y, si vienen, precios de coincidencias de producto.
   - Borra la imagen al terminar.
-- [ ] UI: muestra los candidatos, el usuario elige o edita el nombre (variante, capacidad) y
+- [x] UI: muestra los candidatos, el usuario elige o edita el nombre (variante, capacidad) y
       confirma; entonces corre la búsqueda de precios de la Fase 2A.
-- [ ] Consejo visible: fotografiar etiqueta, caja o número de modelo.
+- [x] Consejo visible: fotografiar etiqueta, caja o número de modelo.
+- [ ] **(Pablo)** Probar en producción con una foto real (en local Lens no puede ver la foto porque
+      `localhost` no es público). Si falla seguido con "No se reconoció", revisar si es por la
+      propagación de KV entre regiones y considerar R2.
+- Notas: candidatos salen de `related_content` de Lens (nombres limpios) y de títulos de
+  coincidencias; tocar un candidato llena el buscador y NO busca precios solo (cuida la cuota).
 
 Terminado cuando: una foto de la caja de un producto común da el nombre correcto entre los
 candidatos y lleva a sus precios con dos toques.

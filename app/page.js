@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Precios from './Precios';
+import Identificacion, { reducirImagen } from './Foto';
 
 const Escaner = dynamic(() => import('./Escaner'), { ssr: false });
 
@@ -89,6 +90,8 @@ export default function Inicio() {
   const [cuota, setCuota] = useState(null);
   const [vista, setVista] = useState('buscar');
   const claveRef = useRef(null);
+  const fotoRef = useRef(null);
+  const [ident, setIdent] = useState({ fase: 'inactivo' });
 
   // Cargar lo guardado en este celular
   useEffect(() => {
@@ -173,6 +176,56 @@ export default function Inicio() {
     }
   }
 
+  // Foto -> Google Lens -> candidatos. No busca precios solo: el usuario elige el nombre y confirma.
+  async function identificarFoto(e) {
+    const archivo = e.target.files?.[0];
+    e.target.value = ''; // permite volver a elegir la misma foto
+    if (!archivo) return;
+    if (ident.vista) URL.revokeObjectURL(ident.vista);
+    const vista = URL.createObjectURL(archivo);
+    if (!clave.trim()) {
+      setIdent({ fase: 'error', vista, faltaClave: true, error: 'Falta la clave de acceso. Ponla en Ajustes.' });
+      return;
+    }
+    setIdent({ fase: 'cargando', vista });
+    const control = new AbortController();
+    const reloj = setTimeout(() => control.abort(), 30000);
+    try {
+      const foto = await reducirImagen(archivo);
+      const r = await fetch('/api/identificar', {
+        method: 'POST',
+        headers: { 'content-type': 'image/jpeg', 'x-revende-clave': clave.trim() },
+        body: foto,
+        signal: control.signal,
+      });
+      const datos = await r.json().catch(() => null);
+      if (r.ok && datos?.ok) {
+        setIdent({ fase: 'ok', vista, candidatos: datos.candidatos, precios: datos.precios || [] });
+      } else {
+        setIdent({ fase: 'error', vista, faltaClave: r.status === 401, error: datos?.error || 'No se pudo identificar la foto. Intenta de nuevo.' });
+      }
+      cargarCuota(clave.trim());
+    } catch (err) {
+      setIdent({
+        fase: 'error',
+        vista,
+        error: err.name === 'AbortError' ? 'Tardó demasiado. Intenta de nuevo.' : 'No se pudo enviar la foto. Revisa tu internet.',
+      });
+    } finally {
+      clearTimeout(reloj);
+    }
+  }
+
+  const cerrarIdent = () => {
+    if (ident.vista) URL.revokeObjectURL(ident.vista);
+    setIdent({ fase: 'inactivo' });
+  };
+
+  const elegirCandidato = (nombre) => {
+    setBusqueda(nombre);
+    cerrarIdent();
+  };
+
   const irA = (destino) => {
     setVista(destino);
     window.scrollTo(0, 0);
@@ -206,20 +259,37 @@ export default function Inicio() {
                   type="search"
                   inputMode="search"
                   autoComplete="off"
-                  placeholder="Modelo o código de barras"
+                  placeholder="Modelo o código"
                   value={busqueda}
                   enterKeyHint="search"
                   onChange={(e) => setBusqueda(e.target.value)}
                 />
-                <button type="button" className="boton boton-escanear" onClick={() => setEscaneando(true)}>
-                  Escanear
+                <button type="button" className="boton-icono" onClick={() => fotoRef.current?.click()} disabled={ident.fase === 'cargando'}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 8h3l2-3h6l2 3h3v11H4z" />
+                    <circle cx="12" cy="13" r="3.5" />
+                  </svg>
+                  <span>Foto</span>
                 </button>
+                <button type="button" className="boton-icono" onClick={() => setEscaneando(true)}>
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 6v12M7 6v12M10 6v12M14 6v12M16 6v12M20 6v12" />
+                  </svg>
+                  <span>Código</span>
+                </button>
+                <input ref={fotoRef} type="file" accept="image/*" capture="environment" hidden onChange={identificarFoto} />
               </form>
             </header>
 
             <section className="bloque">
+              <Identificacion estado={ident} onElegir={elegirCandidato} onCerrar={cerrarIdent} onAbrirAjustes={abrirAjustesClave} />
               {!q ? (
-                <p className="vacio">Escribe el modelo (ej. “PS5 Slim digital”) o escanea el código y toca “Buscar precios”.</p>
+                ident.fase === 'inactivo' && (
+                  <>
+                    <p className="vacio">Escribe el modelo (ej. “PS5 Slim digital”), escanea el código o toma una foto, y toca “Buscar precios”.</p>
+                    <p className="pista">Para la foto: enfoca la etiqueta, la caja o el número de modelo. Funciona mejor que el artículo solo.</p>
+                  </>
+                )
               ) : (
                 <>
                   <button type="button" className="boton boton-buscar" onClick={buscarPrecios} disabled={q.length < 2 || precios.fase === 'cargando'}>

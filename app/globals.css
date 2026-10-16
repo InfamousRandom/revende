@@ -97,7 +97,27 @@ body {
   border: 1.5px solid var(--tinta);
   cursor: pointer;
 }
-.boton-escanear { background: var(--tinta); color: var(--fondo); }
+/* Botones cuadrados con icono (Foto, Código) junto al buscador */
+.boton-icono {
+  flex: none;
+  width: 56px;
+  height: 52px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--fondo);
+  background: var(--tinta);
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.boton-icono svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.boton-icono:disabled { opacity: 0.6; }
 .boton-secundario { background: transparent; color: var(--tinta); width: 100%; }
 
 /* ---------- Bloques ---------- */
@@ -437,3 +457,49 @@ body {
 /* ---------- Búsquedas restantes ---------- */
 .cuota { margin: 8px 0 0; font-size: 0.82rem; color: var(--tenue); }
 .cuota-pocas { color: var(--pierde); font-weight: 600; }
+
+/* ---------- Identificar por foto ---------- */
+.identificacion { margin: 0 0 14px; }
+.ident-cabecera { display: flex; gap: 12px; align-items: flex-start; }
+.ident-foto { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex: none; background: var(--linea); }
+.ident-texto { flex: 1; min-width: 0; }
+.ident-texto p { margin: 0; }
+.ident-cerrar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: -8px -8px 0 0;
+  font-size: 1.1rem;
+  color: var(--tenue);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.barra-carga {
+  height: 4px;
+  margin-top: 12px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--linea) 0%, var(--etiqueta) 50%, var(--linea) 100%);
+  background-size: 200% 100%;
+  animation: cargando 1.2s linear infinite;
+}
+.candidatos { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.candidato {
+  min-height: 50px;
+  padding: 10px 14px;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  color: var(--tinta);
+  background: var(--fondo);
+  border: 1.5px solid var(--linea);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.candidato:active { border-color: var(--tinta); }
+.ident-subtitulo { font-size: 0.95rem; font-weight: 600; color: var(--tenue); margin: 18px 0 2px; }
+.identificacion .boton { margin-top: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-carga { animation: none; }
+}
