@@ -100,7 +100,7 @@ body {
 .boton-secundario { background: transparent; color: var(--tinta); width: 100%; }
 
 /* ---------- Bloques ---------- */
-.bloque { padding: 24px 0 8px; }
+.bloque { padding: 24px 0 8px; scroll-margin-top: 140px; /* no quedar bajo la cabecera fija */ }
 .bloque h2 {
   font-family: var(--display);
   font-weight: 700;
@@ -142,6 +142,108 @@ body {
 .tienda:active { border-color: var(--tinta); }
 .tienda-nombre { font-weight: 600; }
 .tienda-nota { font-size: 0.85rem; color: var(--tenue); }
+
+/* ---------- Precios de nuevo ---------- */
+.boton-buscar { width: 100%; background: var(--tinta); color: var(--fondo); font-size: 1.05rem; }
+.boton-buscar:disabled { opacity: 0.6; cursor: default; }
+.subtitulo { font-size: 1rem; font-weight: 600; margin: 24px 0 10px; }
+
+.precios {
+  margin-top: 12px;
+  padding: 16px;
+  background: var(--superficie);
+  border: 1.5px solid var(--linea);
+  border-radius: 12px;
+}
+.precios p { margin: 0; }
+.precios-cargando { color: var(--tenue); }
+.precios-cargando p::after {
+  content: '';
+  display: block;
+  height: 4px;
+  margin-top: 12px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--linea) 0%, var(--etiqueta) 50%, var(--linea) 100%);
+  background-size: 200% 100%;
+  animation: cargando 1.2s linear infinite;
+}
+@keyframes cargando { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.precios-error { border-color: var(--pierde); border-style: dashed; }
+.precios-vacio { border-color: var(--linea); }
+.precios-error .boton { margin-top: 12px; }
+
+.precios-producto { font-weight: 600; line-height: 1.3; }
+.precios-rango {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--linea);
+}
+.precios-tipico { display: flex; flex-direction: column; min-width: 0; }
+.precios-etiqueta { font-size: 0.9rem; color: var(--tenue); font-weight: 500; }
+.precios-cifra {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(2.2rem, 11vw, 2.9rem);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.precios-extremos { margin: 0; display: flex; flex-direction: column; gap: 2px; text-align: right; }
+.precios-extremos div { display: flex; gap: 8px; justify-content: flex-end; align-items: baseline; }
+.precios-extremos dt { font-size: 0.85rem; color: var(--tenue); }
+.precios-extremos dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.ofertas { list-style: none; margin: 0; padding: 0; }
+.oferta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 6px 0;
+}
+.oferta + .oferta { border-top: 1px solid var(--linea); }
+.oferta-info { display: flex; flex-direction: column; min-width: 0; }
+.oferta-tienda { font-weight: 600; }
+.oferta-titulo {
+  font-size: 0.82rem;
+  color: var(--tenue);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.oferta-precio { font-weight: 600; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.oferta-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  color: var(--foco);
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.boton-referencia {
+  width: 100%;
+  margin-top: 14px;
+  background: var(--etiqueta);
+  color: var(--etiqueta-tinta);
+  border-color: var(--etiqueta-tinta);
+}
+.precios-pie { margin-top: 10px !important; font-size: 0.82rem; color: var(--tenue); }
+.falta {
+  font-family: var(--texto);
+  font-size: 0.8rem;
+  font-weight: 600;
+  vertical-align: middle;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--etiqueta);
+  color: var(--etiqueta-tinta);
+}
 
 /* ---------- Calculadora ---------- */
 .canales { border: 0; padding: 0; margin: 0 0 16px; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -269,6 +371,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .etiqueta { transform: none; }
+  .precios-cargando p::after { animation: none; }
 }
 
 @media (max-width: 360px) {

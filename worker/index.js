@@ -129,7 +129,7 @@ function mediana(numeros) {
 function verificarClave(request, env) {
   if (!env.REVENDE_CLAVE) return json({ ok: false, error: 'Falta configurar la clave de acceso en Cloudflare' }, 500);
   if (request.headers.get('x-revende-clave') !== env.REVENDE_CLAVE) {
-    return json({ ok: false, error: 'Clave de acceso incorrecta. Revisala en Ajustes.' }, 401);
+    return json({ ok: false, error: 'Clave de acceso incorrecta. Revísala en Ajustes.' }, 401);
   }
   return null;
 }
@@ -200,7 +200,7 @@ async function precios(request, env) {
     consulta = String((await request.json()).consulta || '').replace(/\s+/g, ' ').trim();
   } catch {}
   if (consulta.length < 2 || consulta.length > 120) {
-    return json({ ok: false, error: 'Escribe el articulo (entre 2 y 120 caracteres)' }, 400);
+    return json({ ok: false, error: 'Escribe el artículo (entre 2 y 120 caracteres)' }, 400);
   }
 
   const claveCache = `precios:${normalizar(consulta)}`;
@@ -212,16 +212,16 @@ async function precios(request, env) {
   const { status, datos } = await buscarSerpApi(consulta, env);
   const errorSerp = String(datos.error || '');
   if (status === 401 || /invalid api key/i.test(errorSerp)) {
-    return json({ ok: false, error: 'La llave de SerpApi no es valida' }, 502);
+    return json({ ok: false, error: 'La llave de SerpApi no es válida' }, 502);
   }
   if (status === 429 || /run out of searches|limit/i.test(errorSerp)) {
-    return json({ ok: false, error: 'Se acabaron las busquedas de SerpApi de este mes (o de esta hora). Intenta mas tarde.' }, 429);
+    return json({ ok: false, error: 'Se acabaron las búsquedas de precios de este mes (o de esta hora). Intenta más tarde.' }, 429);
   }
   if (errorSerp && !/hasn't returned any results/i.test(errorSerp)) {
-    return json({ ok: false, error: 'El servicio de precios fallo. Intenta de nuevo.', detalle: errorSerp.slice(0, 200) }, 502);
+    return json({ ok: false, error: 'El servicio de precios falló. Intenta de nuevo.', detalle: errorSerp.slice(0, 200) }, 502);
   }
   if (status >= 400 && !errorSerp) {
-    return json({ ok: false, error: `El servicio de precios respondio ${status}` }, 502);
+    return json({ ok: false, error: `El servicio de precios respondió ${status}` }, 502);
   }
 
   const crudos = [...(datos.shopping_results || []), ...(datos.inline_shopping_results || [])];
@@ -229,7 +229,7 @@ async function precios(request, env) {
 
   if (!ofertas.length) {
     // No se cachea: puede ser un error de escritura y el usuario lo corregira.
-    return json({ ok: false, vacio: true, error: 'No se encontraron precios para ese articulo. Prueba con otro nombre o modelo.' }, 404);
+    return json({ ok: false, vacio: true, error: 'No se encontraron precios para ese artículo. Prueba con otro nombre o modelo.' }, 404);
   }
 
   const lista = ofertas.map((o) => o.precio);

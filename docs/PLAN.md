@@ -31,12 +31,12 @@ mejores ofertas, sin salir a otras páginas.
     búsqueda extra por oferta; por ahora no.
   - Filtros además de la mediana: usados/reacondicionados, eBay, títulos con paquete/bundle/"+"/
     juego/edición especial (salvo que la consulta los incluya), y una oferta por tienda.
-- [ ] Pantalla de resultados en la app:
+- [x] Pantalla de resultados en la app:
   - Botón "Buscar precios" (no busca mientras se escribe).
   - Tarjeta con rango nuevo, lista de 4-5 ofertas (tienda, precio, link pequeño para verificar).
   - Botón "Usar como referencia" que lleva un valor a la calculadora.
   - Estados de carga, vacío y error.
-- [ ] Ajustes: campo "Clave de acceso" guardado en el celular; aviso si falta.
+- [x] Ajustes: campo "Clave de acceso" guardado en el celular; aviso si falta.
 - [ ] Mostrar búsquedas de SerpApi restantes del mes, si su API de cuenta lo permite (verificar endpoint).
 
 Terminado cuando: "PS5 Slim digital" muestra en menos de 5 s un rango coherente y ofertas con

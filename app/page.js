@@ -1,6 +1,7 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Precios from './Precios';
 
 const Escaner = dynamic(() => import('./Escaner'), { ssr: false });
 
@@ -49,6 +50,8 @@ const CANALES_INICIALES = [
 
 const CLAVE_CANALES = 'revende:canales';
 const CLAVE_CALC = 'revende:calculadora';
+const CLAVE_ACCESO = 'revende:clave';
+const ESPERA_MAXIMA_MS = 20000;
 
 const leer = (clave, defecto) => {
   try {
@@ -77,11 +80,16 @@ export default function Inicio() {
   const [canales, setCanales] = useState(CANALES_INICIALES);
   const [calc, setCalc] = useState({ venta: '', canal: 'marketplace', envio: '0', otros: '', margen: '20', compra: '' });
   const [listo, setListo] = useState(false);
+  const [clave, setClave] = useState('');
+  const [precios, setPrecios] = useState({ fase: 'inactivo' });
+  const ajustesClaveRef = useRef(null);
+  const calcRef = useRef(null);
 
   // Cargar lo guardado en este celular
   useEffect(() => {
     setCanales(leer(CLAVE_CANALES, CANALES_INICIALES));
     setCalc((c) => ({ ...c, ...leer(CLAVE_CALC, {}) }));
+    setClave(leer(CLAVE_ACCESO, ''));
     setListo(true);
   }, []);
   useEffect(() => {
@@ -90,6 +98,9 @@ export default function Inicio() {
   useEffect(() => {
     if (listo) guardar(CLAVE_CALC, { canal: calc.canal, margen: calc.margen });
   }, [calc.canal, calc.margen, listo]);
+  useEffect(() => {
+    if (listo) guardar(CLAVE_ACCESO, clave.trim());
+  }, [clave, listo]);
 
   const canal = canales.find((c) => c.id === calc.canal) || canales[0];
   const sinComision = canal.comision === '';
@@ -117,11 +128,65 @@ export default function Inicio() {
 
   const q = busqueda.trim();
 
+  // Solo busca cuando el usuario lo pide (botón o Enter): cuida la cuota de SerpApi.
+  async function buscarPrecios(e) {
+    e?.preventDefault();
+    if (q.length < 2 || precios.fase === 'cargando') return;
+    if (!clave.trim()) {
+      setPrecios({ fase: 'error', consulta: q, faltaClave: true, error: 'Falta la clave de acceso para buscar precios. Ponla en Ajustes, abajo.' });
+      return;
+    }
+    setPrecios({ fase: 'cargando', consulta: q });
+    const control = new AbortController();
+    const reloj = setTimeout(() => control.abort(), ESPERA_MAXIMA_MS);
+    try {
+      const r = await fetch('/api/precios', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-revende-clave': clave.trim() },
+        body: JSON.stringify({ consulta: q }),
+        signal: control.signal,
+      });
+      const datos = await r.json().catch(() => null);
+      if (r.ok && datos?.ok) {
+        setPrecios({ fase: 'ok', consulta: q, datos });
+      } else {
+        setPrecios({
+          fase: 'error',
+          consulta: q,
+          vacio: Boolean(datos?.vacio),
+          faltaClave: r.status === 401,
+          error: datos?.error || 'No se pudieron traer los precios. Intenta de nuevo.',
+        });
+      }
+    } catch (err) {
+      setPrecios({
+        fase: 'error',
+        consulta: q,
+        error: err.name === 'AbortError' ? 'La búsqueda tardó demasiado. Intenta de nuevo.' : 'Sin conexión. Revisa tu internet e intenta de nuevo.',
+      });
+    } finally {
+      clearTimeout(reloj);
+    }
+  }
+
+  const usarReferencia = (valor) => {
+    setCalc((c) => ({ ...c, venta: String(valor) }));
+    calcRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const abrirAjustesClave = () => {
+    const d = ajustesClaveRef.current;
+    if (!d) return;
+    d.open = true;
+    d.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    d.querySelector('input')?.focus({ preventScroll: true });
+  };
+
   return (
     <main className="app">
       <header className="cabecera">
         <h1 className="marca">Revende</h1>
-        <div className="buscador">
+        <form className="buscador" role="search" onSubmit={buscarPrecios}>
           <label htmlFor="busqueda" className="sr-only">
             Artículo, modelo o código de barras
           </label>
@@ -132,12 +197,13 @@ export default function Inicio() {
             autoComplete="off"
             placeholder="Modelo o código de barras"
             value={busqueda}
+            enterKeyHint="search"
             onChange={(e) => setBusqueda(e.target.value)}
           />
           <button type="button" className="boton boton-escanear" onClick={() => setEscaneando(true)}>
             Escanear
           </button>
-        </div>
+        </form>
       </header>
 
       {escaneando && (
@@ -153,28 +219,36 @@ export default function Inicio() {
       <section className="bloque" aria-labelledby="t-precios">
         <h2 id="t-precios">Buscar precios</h2>
         {!q ? (
-          <p className="vacio">Escribe el modelo (ej. “PS5 Slim digital”) o escanea el código para abrir la búsqueda en cada tienda.</p>
+          <p className="vacio">Escribe el modelo (ej. “PS5 Slim digital”) o escanea el código y toca “Buscar precios”.</p>
         ) : (
-          GRUPOS.map((g) => (
-            <div key={g.titulo} className="grupo">
-              <h3>{g.titulo}</h3>
-              <div className="tiendas">
-                {g.tiendas.map((t) => (
-                  <a key={t.nombre} className="tienda" href={t.url(q)} target="_blank" rel="noopener noreferrer">
-                    <span className="tienda-nombre">{t.nombre}</span>
-                    {t.nota && <span className="tienda-nota">{t.nota}</span>}
-                  </a>
-                ))}
+          <>
+            <button type="button" className="boton boton-buscar" onClick={buscarPrecios} disabled={q.length < 2 || precios.fase === 'cargando'}>
+              {precios.fase === 'cargando' ? 'Buscando…' : 'Buscar precios'}
+            </button>
+            {/* Si el texto cambió, el resultado ya no corresponde: se oculta hasta volver a buscar. */}
+            {precios.consulta === q && <Precios estado={precios} onUsar={usarReferencia} onAbrirAjustes={abrirAjustesClave} />}
+            <h3 className="subtitulo">Ver en cada tienda</h3>
+            {GRUPOS.map((g) => (
+              <div key={g.titulo} className="grupo">
+                <h3>{g.titulo}</h3>
+                <div className="tiendas">
+                  {g.tiendas.map((t) => (
+                    <a key={t.nombre} className="tienda" href={t.url(q)} target="_blank" rel="noopener noreferrer">
+                      <span className="tienda-nombre">{t.nombre}</span>
+                      {t.nota && <span className="tienda-nota">{t.nota}</span>}
+                    </a>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))
+            ))}
+          </>
         )}
         {/^\d{8,14}$/.test(q) && (
           <p className="pista">Es un código de barras: si las tiendas no lo encuentran, usa Google Shopping para saber el modelo y búscalo por nombre.</p>
         )}
       </section>
 
-      <section className="bloque" aria-labelledby="t-calc">
+      <section className="bloque" aria-labelledby="t-calc" ref={calcRef}>
         <h2 id="t-calc">¿Cuánto pagar?</h2>
 
         <fieldset className="canales">
@@ -239,6 +313,17 @@ export default function Inicio() {
             <Campo id={`env-${c.id}`} etiqueta="Envío típico" prefijo="$" valor={c.envio} onChange={(e) => editarCanal(c.id, 'envio', e.target.value)} />
           </div>
         ))}
+      </details>
+
+      <details className="bloque ajustes" ref={ajustesClaveRef}>
+        <summary>Clave de acceso {!clave.trim() && listo && <span className="falta">falta</span>}</summary>
+        <p className="vacio">La necesitas para buscar precios dentro de la app. Se guarda solo en este celular.</p>
+        <div className="campo">
+          <label htmlFor="clave">Clave</label>
+          <div className="entrada">
+            <input id="clave" type="password" autoComplete="off" value={clave} onChange={(e) => setClave(e.target.value)} />
+          </div>
+        </div>
       </details>
     </main>
   );
