@@ -14,6 +14,9 @@ const haceCuanto = (iso) => {
 
 // Tarjeta de precios. `estado`: { fase: 'inactivo' | 'cargando' | 'ok' | 'error', datos, error, consulta }
 export default function Precios({ estado, onUsar, onAbrirAjustes }) {
+  const [lista, setLista] = useState('nuevos');
+  const [todas, setTodas] = useState(false);
+
   if (estado.fase === 'inactivo') return null;
 
   if (estado.fase === 'cargando') {
@@ -30,7 +33,7 @@ export default function Precios({ estado, onUsar, onAbrirAjustes }) {
         <p>{estado.error}</p>
         {estado.faltaClave && (
           <button type="button" className="boton boton-secundario" onClick={onAbrirAjustes}>
-            Poner clave de acceso
+            Ir a Ajustes
           </button>
         )}
       </div>
@@ -38,26 +41,65 @@ export default function Precios({ estado, onUsar, onAbrirAjustes }) {
   }
 
   const d = estado.datos;
+  const ofertas = d[lista].ofertas;
+  const visibles = todas ? ofertas : ofertas.slice(0, VISIBLES);
+  const elegir = (id) => {
+    setLista(id);
+    setTodas(false);
+  };
+
   return (
     <div className="precios" aria-live="polite">
       <p className="precios-producto">{d.producto}</p>
-      <p className="precios-pie">
-        {d.total} resultados de {d.tiendas} tiendas en Google Shopping · {d.cache ? `guardado ${haceCuanto(d.fecha)}` : 'recién consultado'}
-      </p>
 
       <div className="precios-resumen">
         <Resumen titulo="Nuevo" grupo={d.nuevos} onUsar={onUsar} />
         <Resumen titulo="Usado" grupo={d.usados} onUsar={onUsar} />
       </div>
 
-      <Lista titulo="Nuevos" ofertas={d.nuevos.ofertas} />
-      <Lista
-        titulo="Usados y reacondicionados"
-        ofertas={d.usados.ofertas}
-        vacio="Google Shopping no mostró usados para este artículo. Revisa Marketplace en “Ver en cada tienda”."
-      />
+      <div className="selector" role="tablist" aria-label="Lista de precios">
+        {[
+          ['nuevos', 'Nuevos'],
+          ['usados', 'Usados'],
+        ].map(([id, nombre]) => (
+          <button key={id} type="button" role="tab" aria-selected={lista === id} className={lista === id ? 'activo' : ''} onClick={() => elegir(id)}>
+            {nombre} <span>{d[id].ofertas.length}</span>
+          </button>
+        ))}
+      </div>
+
+      {!ofertas.length ? (
+        <p className="precios-pie">
+          {lista === 'usados'
+            ? 'Google Shopping no mostró usados para este artículo. Prueba Marketplace en “Abrir en otras tiendas”.'
+            : 'Google Shopping no mostró precios de nuevo para este artículo.'}
+        </p>
+      ) : (
+        <ul className="ofertas">
+          {visibles.map((o, i) => (
+            <li key={`${o.tienda}-${o.precio}-${i}`} className={`oferta ${o.aviso ? 'oferta-marcada' : ''}`}>
+              <div className="oferta-info">
+                <span className="oferta-tienda">{o.tienda}</span>
+                <span className="oferta-titulo">{o.titulo}</span>
+                {(o.aviso || o.condicion === 'Reacondicionado') && <span className="oferta-aviso">{o.aviso || o.condicion}</span>}
+              </div>
+              <span className="oferta-precio">{pesos.format(o.precio)}</span>
+              <a className="oferta-link" href={o.link} target="_blank" rel="noopener noreferrer" aria-label={`Ver oferta de ${o.tienda}`}>
+                Ver
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {ofertas.length > VISIBLES && (
+        <button type="button" className="boton boton-secundario boton-mas" onClick={() => setTodas(!todas)}>
+          {todas ? 'Ver menos' : `Ver los ${ofertas.length}`}
+        </button>
+      )}
+
       <p className="precios-pie">
-        Los marcados en gris (paquetes, accesorios o precios fuera de lo normal) se muestran pero no cuentan para el precio típico.
+        {d.tiendas} tiendas · {d.cache ? `guardado ${haceCuanto(d.fecha)}` : 'recién consultado'}
+        {ofertas.some((o) => o.aviso) && ' · en gris: no cuentan para el precio típico'}
       </p>
     </div>
   );
@@ -77,50 +119,10 @@ function Resumen({ titulo, grupo, onUsar }) {
     <div className="resumen">
       <span className="precios-etiqueta">{titulo} típico</span>
       <span className="precios-cifra">{pesos.format(mediana)}</span>
-      <span className="resumen-rango">
-        {min === max ? 'un solo precio' : `${pesos.format(min)} – ${pesos.format(max)}`}
-      </span>
+      <span className="resumen-rango">{min === max ? 'un solo precio' : `${pesos.format(min)} – ${pesos.format(max)}`}</span>
       <button type="button" className="boton boton-referencia" onClick={() => onUsar(mediana)}>
         Usar precio
       </button>
     </div>
-  );
-}
-
-function Lista({ titulo, ofertas, vacio }) {
-  const [todas, setTodas] = useState(false);
-  const visibles = todas ? ofertas : ofertas.slice(0, VISIBLES);
-  return (
-    <section className="lista-ofertas">
-      <h3 className="lista-titulo">
-        {titulo} <span>({ofertas.length})</span>
-      </h3>
-      {!ofertas.length ? (
-        <p className="precios-pie">{vacio}</p>
-      ) : (
-        <ul className="ofertas">
-          {visibles.map((o, i) => (
-            <li key={`${o.tienda}-${o.precio}-${i}`} className={`oferta ${o.aviso ? 'oferta-marcada' : ''}`}>
-              <div className="oferta-info">
-                <span className="oferta-tienda">{o.tienda}</span>
-                <span className="oferta-titulo">{o.titulo}</span>
-                {(o.aviso || o.condicion === 'Reacondicionado') && (
-                  <span className="oferta-aviso">{o.aviso || o.condicion}</span>
-                )}
-              </div>
-              <span className="oferta-precio">{pesos.format(o.precio)}</span>
-              <a className="oferta-link" href={o.link} target="_blank" rel="noopener noreferrer" aria-label={`Ver oferta de ${o.tienda}`}>
-                Ver
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
-      {ofertas.length > VISIBLES && (
-        <button type="button" className="boton boton-secundario boton-mas" onClick={() => setTodas(!todas)}>
-          {todas ? 'Ver menos' : `Ver los ${ofertas.length}`}
-        </button>
-      )}
-    </section>
   );
 }

@@ -71,6 +71,13 @@ const num = (v) => {
 const pesos = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 const pct = (n) => `${Math.round(n * 100)}%`;
 
+// Barra inferior: una pantalla a la vez para no saturar.
+const PESTANAS = [
+  { id: 'buscar', nombre: 'Buscar', icono: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></> },
+  { id: 'calcular', nombre: 'Calcular', icono: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2" /></> },
+  { id: 'ajustes', nombre: 'Ajustes', icono: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></> },
+];
+
 export default function Inicio() {
   const [busqueda, setBusqueda] = useState('');
   const [escaneando, setEscaneando] = useState(false);
@@ -80,8 +87,8 @@ export default function Inicio() {
   const [clave, setClave] = useState('');
   const [precios, setPrecios] = useState({ fase: 'inactivo' });
   const [cuota, setCuota] = useState(null);
-  const ajustesClaveRef = useRef(null);
-  const calcRef = useRef(null);
+  const [vista, setVista] = useState('buscar');
+  const claveRef = useRef(null);
 
   // Cargar lo guardado en este celular
   useEffect(() => {
@@ -128,7 +135,7 @@ export default function Inicio() {
     e?.preventDefault();
     if (q.length < 2 || precios.fase === 'cargando') return;
     if (!clave.trim()) {
-      setPrecios({ fase: 'error', consulta: q, faltaClave: true, error: 'Falta la clave de acceso para buscar precios. Ponla en Ajustes, abajo.' });
+      setPrecios({ fase: 'error', consulta: q, faltaClave: true, error: 'Falta la clave de acceso para buscar precios. Ponla en Ajustes.' });
       return;
     }
     setPrecios({ fase: 'cargando', consulta: q });
@@ -166,42 +173,160 @@ export default function Inicio() {
     }
   }
 
+  const irA = (destino) => {
+    setVista(destino);
+    window.scrollTo(0, 0);
+  };
+
   const usarReferencia = (valor) => {
     setCalc((c) => ({ ...c, venta: String(valor) }));
-    calcRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    irA('calcular');
   };
 
   const abrirAjustesClave = () => {
-    const d = ajustesClaveRef.current;
-    if (!d) return;
-    d.open = true;
-    d.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    d.querySelector('input')?.focus({ preventScroll: true });
+    irA('ajustes');
+    setTimeout(() => claveRef.current?.focus(), 50);
   };
 
+  const sinClave = listo && !clave.trim();
+
   return (
-    <main className="app">
-      <header className="cabecera">
-        <h1 className="marca">Revende</h1>
-        <form className="buscador" role="search" onSubmit={buscarPrecios}>
-          <label htmlFor="busqueda" className="sr-only">
-            Artículo, modelo o código de barras
-          </label>
-          <input
-            id="busqueda"
-            type="search"
-            inputMode="search"
-            autoComplete="off"
-            placeholder="Modelo o código de barras"
-            value={busqueda}
-            enterKeyHint="search"
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
-          <button type="button" className="boton boton-escanear" onClick={() => setEscaneando(true)}>
-            Escanear
-          </button>
-        </form>
-      </header>
+    <>
+      <main className="app">
+        {vista === 'buscar' && (
+          <>
+            <header className="cabecera">
+              <h1 className="marca">Revende</h1>
+              <form className="buscador" role="search" onSubmit={buscarPrecios}>
+                <label htmlFor="busqueda" className="sr-only">
+                  Artículo, modelo o código de barras
+                </label>
+                <input
+                  id="busqueda"
+                  type="search"
+                  inputMode="search"
+                  autoComplete="off"
+                  placeholder="Modelo o código de barras"
+                  value={busqueda}
+                  enterKeyHint="search"
+                  onChange={(e) => setBusqueda(e.target.value)}
+                />
+                <button type="button" className="boton boton-escanear" onClick={() => setEscaneando(true)}>
+                  Escanear
+                </button>
+              </form>
+            </header>
+
+            <section className="bloque">
+              {!q ? (
+                <p className="vacio">Escribe el modelo (ej. “PS5 Slim digital”) o escanea el código y toca “Buscar precios”.</p>
+              ) : (
+                <>
+                  <button type="button" className="boton boton-buscar" onClick={buscarPrecios} disabled={q.length < 2 || precios.fase === 'cargando'}>
+                    {precios.fase === 'cargando' ? 'Buscando…' : 'Buscar precios'}
+                  </button>
+                  {cuota && cuota.restantes <= POCAS_BUSQUEDAS && (
+                    <p className="cuota cuota-pocas">Quedan {cuota.restantes} búsquedas este mes.</p>
+                  )}
+                  {/* Si el texto cambió, el resultado ya no corresponde: se oculta hasta volver a buscar. */}
+                  {precios.consulta === q && (
+                    <Precios key={precios.datos?.fecha || precios.fase} estado={precios} onUsar={usarReferencia} onAbrirAjustes={abrirAjustesClave} />
+                  )}
+                  {/^\d{8,14}$/.test(q) && (
+                    <p className="pista">Es un código de barras: si no salen resultados, búscalo en Google Shopping para saber el modelo y escribe el nombre.</p>
+                  )}
+                  <details className="otras-tiendas">
+                    <summary>Abrir en otras tiendas</summary>
+                    {GRUPOS.map((g) => (
+                      <div key={g.titulo} className="grupo">
+                        <h3>{g.titulo}</h3>
+                        <div className="tiendas">
+                          {g.tiendas.map((t) => (
+                            <a key={t.nombre} className="tienda" href={t.url(q)} target="_blank" rel="noopener noreferrer">
+                              <span className="tienda-nombre">{t.nombre}</span>
+                              {t.nota && <span className="tienda-nota">{t.nota}</span>}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </details>
+                </>
+              )}
+            </section>
+          </>
+        )}
+
+        {vista === 'calcular' && (
+          <section className="bloque pantalla">
+            <h2>¿Cuánto pagar?</h2>
+
+            <div className="campos">
+              <Campo id="venta" etiqueta="Precio de venta esperado" prefijo="$" valor={calc.venta} onChange={set('venta')} grande />
+              <Campo id="gastos" etiqueta="Tus gastos" prefijo="$" valor={calc.gastos} onChange={set('gastos')} ayuda="Gasolina, envío, limpieza" />
+              <Campo id="margen" etiqueta="Ganancia que buscas" sufijo="%" valor={calc.margen} onChange={set('margen')} ayuda="Sobre el precio de venta" />
+            </div>
+
+            <div className={`etiqueta ${r.V > 0 && r.maximo <= 0 ? 'etiqueta-no' : ''}`} aria-live="polite">
+              {r.V <= 0 ? (
+                <p className="etiqueta-vacia">Pon el precio en que crees que se vende y aquí verás lo máximo que deberías pagar.</p>
+              ) : r.maximo > 0 ? (
+                <>
+                  <span className="etiqueta-titulo">Paga máximo</span>
+                  <span className="etiqueta-cifra">{pesos.format(Math.floor(r.maximo))}</span>
+                  <span className="etiqueta-detalle">
+                    Te quedan {pesos.format(r.neto)} después de tus gastos; así ganas al menos {calc.margen || 0}%.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="etiqueta-titulo">No conviene</span>
+                  <span className="etiqueta-detalle">
+                    A {pesos.format(r.V)} los gastos se comen el margen que buscas. Baja tu margen o busca un mejor precio de venta.
+                  </span>
+                </>
+              )}
+            </div>
+
+            <Campo id="compra" etiqueta="¿Cuánto te piden?" prefijo="$" valor={calc.compra} onChange={set('compra')} ayuda="Opcional: para ver tu ganancia real" />
+            {r.V > 0 && r.hayCompra && (
+              <p className={`resultado ${r.ganancia >= 0 ? 'positivo' : 'negativo'}`}>
+                {r.ganancia >= 0 ? 'Ganarías' : 'Perderías'} {pesos.format(Math.abs(r.ganancia))} ({pct(Math.abs(r.margenReal))} de la venta).
+              </p>
+            )}
+          </section>
+        )}
+
+        {vista === 'ajustes' && (
+          <section className="bloque pantalla">
+            <h2>Ajustes</h2>
+
+            <div className="ajuste">
+              <h3>Clave de acceso {sinClave && <span className="falta">falta</span>}</h3>
+              <p className="vacio">La necesitas para buscar precios dentro de la app. Se guarda solo en este celular.</p>
+              <div className="campo">
+                <label htmlFor="clave">Clave</label>
+                <div className="entrada">
+                  <input id="clave" ref={claveRef} type="password" autoComplete="off" value={clave} onChange={(e) => setClave(e.target.value)} />
+                </div>
+              </div>
+            </div>
+
+            <div className="ajuste">
+              <h3>Búsquedas de precios</h3>
+              {cuota ? (
+                <p className={cuota.restantes <= POCAS_BUSQUEDAS ? 'cuota-pocas' : ''}>
+                  Te quedan <strong>{cuota.restantes}</strong> de {cuota.mensuales} este mes
+                  {cuota.renovacion && `; se renuevan el ${fechaCorta(cuota.renovacion)}`}.
+                </p>
+              ) : (
+                <p className="vacio">{sinClave ? 'Pon tu clave para ver cuántas te quedan.' : 'Cargando…'}</p>
+              )}
+              <p className="vacio">Repetir una búsqueda el mismo día no gasta.</p>
+            </div>
+          </section>
+        )}
+      </main>
 
       {escaneando && (
         <Escaner
@@ -213,94 +338,24 @@ export default function Inicio() {
         />
       )}
 
-      <section className="bloque" aria-labelledby="t-precios">
-        <h2 id="t-precios">Buscar precios</h2>
-        {!q ? (
-          <p className="vacio">Escribe el modelo (ej. “PS5 Slim digital”) o escanea el código y toca “Buscar precios”.</p>
-        ) : (
-          <>
-            <button type="button" className="boton boton-buscar" onClick={buscarPrecios} disabled={q.length < 2 || precios.fase === 'cargando'}>
-              {precios.fase === 'cargando' ? 'Buscando…' : 'Buscar precios'}
-            </button>
-            {cuota && (
-              <p className={`cuota ${cuota.restantes <= POCAS_BUSQUEDAS ? 'cuota-pocas' : ''}`}>
-                Te quedan {cuota.restantes} de {cuota.mensuales} búsquedas este mes
-                {cuota.renovacion && ` · se renuevan el ${fechaCorta(cuota.renovacion)}`}. Repetir una búsqueda del mismo día no gasta.
-              </p>
-            )}
-            {/* Si el texto cambió, el resultado ya no corresponde: se oculta hasta volver a buscar. */}
-            {precios.consulta === q && <Precios key={precios.datos?.fecha || precios.fase} estado={precios} onUsar={usarReferencia} onAbrirAjustes={abrirAjustesClave} />}
-            <h3 className="subtitulo">Ver en cada tienda</h3>
-            {GRUPOS.map((g) => (
-              <div key={g.titulo} className="grupo">
-                <h3>{g.titulo}</h3>
-                <div className="tiendas">
-                  {g.tiendas.map((t) => (
-                    <a key={t.nombre} className="tienda" href={t.url(q)} target="_blank" rel="noopener noreferrer">
-                      <span className="tienda-nombre">{t.nombre}</span>
-                      {t.nota && <span className="tienda-nota">{t.nota}</span>}
-                    </a>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </>
-        )}
-        {/^\d{8,14}$/.test(q) && (
-          <p className="pista">Es un código de barras: si las tiendas no lo encuentran, usa Google Shopping para saber el modelo y búscalo por nombre.</p>
-        )}
-      </section>
-
-      <section className="bloque" aria-labelledby="t-calc" ref={calcRef}>
-        <h2 id="t-calc">¿Cuánto pagar?</h2>
-
-        <div className="campos">
-          <Campo id="venta" etiqueta="Precio de venta esperado" prefijo="$" valor={calc.venta} onChange={set('venta')} grande />
-          <Campo id="gastos" etiqueta="Tus gastos" prefijo="$" valor={calc.gastos} onChange={set('gastos')} ayuda="Gasolina, envío, limpieza" />
-          <Campo id="margen" etiqueta="Ganancia que buscas" sufijo="%" valor={calc.margen} onChange={set('margen')} ayuda="Sobre el precio de venta" />
-        </div>
-
-        <div className={`etiqueta ${r.V > 0 && r.maximo <= 0 ? 'etiqueta-no' : ''}`} aria-live="polite">
-          {r.V <= 0 ? (
-            <p className="etiqueta-vacia">Pon el precio en que crees que se vende y aquí verás lo máximo que deberías pagar.</p>
-          ) : r.maximo > 0 ? (
-            <>
-              <span className="etiqueta-titulo">Paga máximo</span>
-              <span className="etiqueta-cifra">{pesos.format(Math.floor(r.maximo))}</span>
-              <span className="etiqueta-detalle">
-                Te quedan {pesos.format(r.neto)} después de tus gastos; así ganas al menos {calc.margen || 0}%.
-              </span>
-            </>
-          ) : (
-            <>
-              <span className="etiqueta-titulo">No conviene</span>
-              <span className="etiqueta-detalle">
-                A {pesos.format(r.V)} los gastos se comen el margen que buscas. Baja tu margen o busca un mejor precio de venta.
-              </span>
-            </>
-          )}
-        </div>
-
-        <Campo id="compra" etiqueta="¿Cuánto te piden?" prefijo="$" valor={calc.compra} onChange={set('compra')} ayuda="Opcional: para ver tu ganancia real" />
-        {r.V > 0 && r.hayCompra && (
-          <p className={`resultado ${r.ganancia >= 0 ? 'positivo' : 'negativo'}`}>
-            {r.ganancia >= 0 ? 'Ganarías' : 'Perderías'} {pesos.format(Math.abs(r.ganancia))} ({pct(Math.abs(r.margenReal))} de la venta).
-          </p>
-        )}
-      </section>
-
-
-      <details className="bloque ajustes" ref={ajustesClaveRef}>
-        <summary>Clave de acceso {!clave.trim() && listo && <span className="falta">falta</span>}</summary>
-        <p className="vacio">La necesitas para buscar precios dentro de la app. Se guarda solo en este celular.</p>
-        <div className="campo">
-          <label htmlFor="clave">Clave</label>
-          <div className="entrada">
-            <input id="clave" type="password" autoComplete="off" value={clave} onChange={(e) => setClave(e.target.value)} />
-          </div>
-        </div>
-      </details>
-    </main>
+      <nav className="pestanas" aria-label="Secciones">
+        {PESTANAS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            className={`pestana ${vista === p.id ? 'activa' : ''}`}
+            aria-current={vista === p.id ? 'page' : undefined}
+            onClick={() => irA(p.id)}
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              {p.icono}
+            </svg>
+            <span>{p.nombre}</span>
+            {p.id === 'ajustes' && sinClave && <i className="punto" aria-label="falta la clave" />}
+          </button>
+        ))}
+      </nav>
+    </>
   );
 }
 
