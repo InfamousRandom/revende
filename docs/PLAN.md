@@ -53,9 +53,14 @@ estimar precios de artículos que nunca he vendido a partir de mi historial por 
 
 Preparación:
 
-- [ ] **(Pablo)** Crear base D1 `revende-db` en Cloudflare y pasar su ID
+- [x] **(Pablo)** Crear base D1 `revende-db` en Cloudflare y pasar su ID
       (alternativa: `npx wrangler d1 create revende-db`).
-- [ ] Binding `DB` en `wrangler.jsonc` y carpeta `migrations/`.
+- [x] Binding `DB` en `wrangler.jsonc` y carpeta `migrations/` (`0001_historial.sql`).
+- [ ] **(Pablo)** Que el deploy aplique las migraciones: en Cloudflare → Workers → revende →
+      Settings → Build → Deploy command, cambiar `npx wrangler deploy` por
+      `npx wrangler d1 migrations apply revende-db --remote && npx wrangler deploy`.
+      Sin esto, la base de producción queda sin tablas. Hacerlo antes del primer push de la Fase 3.
+- Local: `npx wrangler d1 migrations apply revende-db --local` (correr antes de `wrangler dev`).
 
 Esquema inicial (ajustable):
 
@@ -68,6 +73,9 @@ Esquema inicial (ajustable):
 - `capturas_usado`: id, producto_id, fuente (marketplace | ml_usado | otro), precio, condicion,
   url opcional, fecha.
 - Montos en pesos como enteros; fechas ISO.
+- Implementado en `migrations/0001_historial.sql`, con: columna `productos.busqueda` (texto sin
+  acentos para autocompletar, la llena el Worker), `CHECK` de condición, canal y fuente, precios
+  no negativos, precio y fecha de venta juntos (y de compra), y al menos compra o venta.
 
 API (todas con `x-revende-clave`; precios y foto siguen sin clave):
 

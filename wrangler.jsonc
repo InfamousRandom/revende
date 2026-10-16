@@ -11,6 +11,15 @@
   "kv_namespaces": [
     { "binding": "CACHE", "id": "3bbdb431f6f94a3b82bc214701406b4e" }
   ],
+  // Historial de ventas, catálogo y capturas de usado (Fase 3). Migraciones en migrations/.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "revende-db",
+      "database_id": "56e3ab54-e298-4e7a-a765-e578e7846b14",
+      "migrations_dir": "migrations"
+    }
+  ],
   // Fotos temporales para Google Lens (lectura consistente desde cualquier región).
   "durable_objects": {
     "bindings": [{ "name": "FOTOS", "class_name": "FotoTemporal" }]
