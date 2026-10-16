@@ -15,10 +15,10 @@ Objetivo: escribir o escanear un artículo y ver dentro de la app el rango de pr
 mejores ofertas, sin salir a otras páginas.
 
 - [ ] **(Pablo)** Crear cuenta gratis en serpapi.com y guardar la llave en Cloudflare como Secret `SERPAPI_KEY`.
-- [ ] **(Pablo)** Crear un namespace KV llamado `revende-cache` (Cloudflare → Storage & Databases → KV)
+- [x] **(Pablo)** Crear un namespace KV llamado `revende-cache` (Cloudflare → Storage & Databases → KV)
       y pasar su ID para agregarlo a `wrangler.jsonc`. Alternativa: `npx wrangler kv namespace create revende-cache`.
-- [ ] Binding KV `CACHE` en `wrangler.jsonc`.
-- [ ] `POST /api/precios` en el Worker:
+- [x] Binding KV `CACHE` en `wrangler.jsonc`.
+- [x] `POST /api/precios` en el Worker:
   - Recibe `{ consulta }`, valida `x-revende-clave` y longitud.
   - Llama a SerpApi `engine=google_shopping`, `q`, `gl=mx`, `hl=es`, `google_domain=google.com.mx`.
   - Normaliza cada resultado: título, tienda, precio numérico en MXN, link, miniatura.
@@ -26,6 +26,11 @@ mejores ofertas, sin salir a otras páginas.
   - Devuelve: `producto` (mejor título), `rango { min, mediana, max }`, `ofertas` (top 5), `total`.
   - Cache en KV 24 h por consulta normalizada; indicar en la respuesta si vino de cache.
   - Errores claros en español (sin llave, cuota agotada, sin resultados).
+  - Nota: SerpApi ya no da el link directo de la tienda en Google Shopping, solo la ficha de
+    Google (`product_link`), que muestra esa oferta con su tienda. El link directo costaría una
+    búsqueda extra por oferta; por ahora no.
+  - Filtros además de la mediana: usados/reacondicionados, eBay, títulos con paquete/bundle/"+"/
+    juego/edición especial (salvo que la consulta los incluya), y una oferta por tienda.
 - [ ] Pantalla de resultados en la app:
   - Botón "Buscar precios" (no busca mientras se escribe).
   - Tarjeta con rango nuevo, lista de 4-5 ofertas (tienda, precio, link pequeño para verificar).
@@ -86,5 +91,5 @@ ganancia real y los días que tardó.
 
 ## Decisiones pendientes
 
-- Umbral exacto para descartar accesorios (empezar con < 35 % de la mediana y ajustar con casos reales).
+- Umbral exacto para descartar accesorios: hoy < 35 % y > 200 % de la mediana; ajustar con casos reales.
 - Si conviene unificar `/api/analizar` (Gemini) con `/api/precios` o retirarlo más adelante.

@@ -7,5 +7,8 @@
     "binding": "ASSETS",
     "not_found_handling": "404-page",
     "run_worker_first": ["/api/*"]
-  }
+  },
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "3bbdb431f6f94a3b82bc214701406b4e" }
+  ]
 }
