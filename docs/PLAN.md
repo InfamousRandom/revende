@@ -99,14 +99,22 @@ API (todas con `x-revende-clave`; precios y foto siguen sin clave):
 
 Pantallas:
 
-- [ ] Registrar compra y venta en menos de 30 s, con autocompletado de producto o creación en el momento.
+- [x] Registrar compra y venta en menos de 30 s, con autocompletado de producto o creación en el momento.
+  - Pestaña "Historial" (`app/Historial.js`, `app/SelectorProducto.js`, `app/historial-api.js`).
+  - Compra: producto + precio (condición "usado bueno" y fecha de hoy por defecto; lugar, fecha y
+    notas plegados). 5 acciones con producto existente, 7 creando uno nuevo con categoría.
+  - Venta: tocar el artículo del inventario + precio (Marketplace y hoy por defecto; envío y otros
+    gastos plegados), con ganancia en vivo. 3 acciones. También "Otro artículo" sin compra registrada.
+  - Atajo "Lo compré" en Calcular: abre la compra con el nombre buscado y el precio que te piden.
+  - Autocompletado: si no coinciden todas las palabras, busca con cualquiera ("ps5 slim" encuentra
+    "PlayStation 5 Slim"). Falta: editar o borrar una operación mal registrada.
 - [ ] Al buscar un artículo: tarjeta "Tus ventas" arriba de los precios nuevos, con el contraste
       precio contra rapidez (ej. "$7,200 en 3 días · $7,800 en 21 días").
 - [ ] La calculadora usa como precio de venta esperado la mediana de mis ventas, o la estimación por
       categoría si no hay ventas, indicando de dónde salió el número.
 - [ ] Pantalla "Historial": búsqueda, filtros (categoría, vendido o en inventario), ganancia real,
       margen, días promedio para vender y dinero parado en inventario.
-- [ ] Clave de acceso pedida una sola vez (ventanita al abrir el historial), guardada en el celular.
+- [x] Clave de acceso pedida una sola vez (ventanita al abrir el historial), guardada en el celular.
 - [ ] Captura rápida de precio de usado desde la tarjeta de resultados.
 - [ ] Exportar e importar CSV.
 

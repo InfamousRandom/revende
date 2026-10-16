@@ -375,7 +375,7 @@ body {
   bottom: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
   background: var(--superficie);
   border-top: 1px solid var(--linea);
@@ -518,3 +518,126 @@ body {
 }
 .camara-disparador:active { transform: scale(0.94); }
 .camara-disparador:disabled { opacity: 0.4; }
+
+/* ---------- Historial ---------- */
+.historial h2 { margin-bottom: 14px; }
+.acciones-registro { display: grid; gap: 8px; margin-bottom: 8px; }
+.lista-encabezado { display: flex; align-items: baseline; gap: 8px; font-size: 1.05rem; margin: 24px 0 4px; }
+.lista-encabezado span { color: var(--tenue); font-weight: 500; }
+.lista-encabezado small { margin-left: auto; font-size: 0.85rem; font-weight: 500; color: var(--tenue); }
+.fila-operacion {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 0;
+  font: inherit;
+  text-align: left;
+  color: var(--tinta);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--linea);
+  cursor: pointer;
+}
+.ofertas li:first-child > .fila-operacion { border-top: 0; }
+.fila-accion { font-size: 0.9rem; font-weight: 600; color: var(--foco); }
+.venta-cifras { display: flex; flex-direction: column; align-items: flex-end; }
+.venta-cifras small { font-weight: 600; font-variant-numeric: tabular-nums; }
+.aviso-ok {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  font-weight: 600;
+  color: var(--gana);
+  background: var(--superficie);
+  border-left: 3px solid var(--gana);
+  border-radius: 0 8px 8px 0;
+}
+
+/* Formularios de compra y venta */
+.formulario { display: flex; flex-direction: column; gap: 14px; }
+.formulario h2 { margin: 0; }
+.campo-etiqueta { font-size: 0.95rem; font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  min-height: 44px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 500;
+  color: var(--tinta);
+  background: var(--superficie);
+  border: 1.5px solid var(--linea);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.chip.activo { background: var(--tinta); color: var(--fondo); border-color: var(--tinta); }
+.mas-detalles { border-top: 1px solid var(--linea); }
+.mas-detalles summary { padding: 12px 0; font-weight: 600; color: var(--tenue); cursor: pointer; }
+.mas-detalles[open] { display: flex; flex-direction: column; gap: 12px; }
+.enlace { padding: 0; font: inherit; font-weight: 600; color: var(--foco); background: none; border: 0; cursor: pointer; }
+.enlace-volver { align-self: center; min-height: 44px; margin-top: 4px; }
+
+/* Selector de producto */
+.producto-elegido {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--superficie);
+  border: 1.5px solid var(--tinta);
+  border-radius: 10px;
+}
+.producto-elegido div { display: flex; flex-direction: column; min-width: 0; }
+.producto-elegido small { color: var(--tenue); }
+.sugerencias {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 4px;
+  background: var(--superficie);
+  border: 1.5px solid var(--linea);
+  border-radius: 10px;
+}
+.sugerencias button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 48px;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--tinta);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.sugerencias button:active { background: var(--fondo); }
+.sugerencias small { color: var(--tenue); }
+.sugerencia-nueva { font-weight: 600; color: var(--foco) !important; }
+.producto-nuevo { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+
+/* Ventana para pedir la clave */
+.ventana-fondo {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.ventana {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 400px;
+  padding: 20px;
+  background: var(--superficie);
+  border-radius: 14px;
+}
+.ventana h3 { margin: 0; font-family: var(--display); font-size: 1.4rem; }
+.ventana p { margin: 0; }

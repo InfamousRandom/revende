@@ -1,8 +1,9 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Precios from './Precios';
 import Identificacion, { reducirImagen } from './Foto';
+import Historial from './Historial';
 
 const CamaraFoto = dynamic(() => import('./CamaraFoto'), { ssr: false });
 
@@ -77,6 +78,7 @@ const pct = (n) => `${Math.round(n * 100)}%`;
 const PESTANAS = [
   { id: 'buscar', nombre: 'Buscar', icono: <><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></> },
   { id: 'calcular', nombre: 'Calcular', icono: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 7h8M8 12h2M14 12h2M8 16h2M14 16h2" /></> },
+  { id: 'historial', nombre: 'Historial', icono: <><path d="M4 6h16M4 12h16M4 18h10" /><circle cx="19" cy="18" r="2" /></> },
 ];
 
 export default function Inicio() {
@@ -88,6 +90,8 @@ export default function Inicio() {
   const [precios, setPrecios] = useState({ fase: 'inactivo' });
   const [cuota, setCuota] = useState(null);
   const [vista, setVista] = useState('buscar');
+  const [prefillCompra, setPrefillCompra] = useState(null);
+  const limpiarPrefill = useCallback(() => setPrefillCompra(null), []);
   const fotoRef = useRef(null);
   const [ident, setIdent] = useState({ fase: 'inactivo' });
   const [tomandoFoto, setTomandoFoto] = useState(false);
@@ -95,9 +99,6 @@ export default function Inicio() {
   // Cargar lo guardado en este celular
   useEffect(() => {
     setCalc((c) => ({ ...c, margen: leer(CLAVE_CALC, {}).margen ?? c.margen }));
-    try {
-      localStorage.removeItem('revende:clave'); // ya no se usa clave de acceso
-    } catch {}
     setListo(true);
   }, []);
   useEffect(() => {
@@ -352,8 +353,22 @@ export default function Inicio() {
                 {r.ganancia >= 0 ? 'Ganarías' : 'Perderías'} {pesos.format(Math.abs(r.ganancia))} ({pct(Math.abs(r.margenReal))} de la venta).
               </p>
             )}
+            {r.hayCompra && (
+              <button
+                type="button"
+                className="boton boton-secundario boton-mas"
+                onClick={() => {
+                  setPrefillCompra({ nombre: q, precio: num(calc.compra) });
+                  irA('historial');
+                }}
+              >
+                Lo compré: registrar en historial
+              </button>
+            )}
           </section>
         )}
+
+        {vista === 'historial' && <Historial prefill={prefillCompra} onPrefillUsado={limpiarPrefill} />}
 
       </main>
 

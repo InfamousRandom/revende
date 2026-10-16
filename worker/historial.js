@@ -86,18 +86,25 @@ async function buscarProductos(env, url) {
     ).all();
     return json({ ok: true, productos: results });
   }
-  // Cada palabra debe aparecer (en cualquier orden): "ps5 slim" encuentra "PlayStation 5 Slim (PS5)".
+  // Primero exige todas las palabras (en cualquier orden): "slim playstation" encuentra
+  // "PlayStation 5 Slim". Si nada coincide, acepta cualquiera y ordena por cuántas coinciden:
+  // así "ps5 slim" encuentra "PlayStation 5 Slim" aunque "ps5" no esté escrito.
   const palabras = q.split(' ').slice(0, 6);
-  const condiciones = palabras.map(() => `p.busqueda LIKE ? ESCAPE '\\'`).join(' AND ');
-  const { results } = await env.DB.prepare(
-    `SELECT p.*, (SELECT count(*) FROM operaciones o WHERE o.producto_id = p.id) AS operaciones
-     FROM productos p
-     WHERE p.codigo_barras = ? OR (${condiciones})
-     ORDER BY (p.codigo_barras = ?) DESC, (p.busqueda LIKE ? ESCAPE '\\') DESC, operaciones DESC, length(p.nombre)
-     LIMIT 10`,
-  )
-    .bind(q, ...palabras.map((p) => `%${paraLike(p)}%`), q, `${paraLike(q)}%`)
-    .all();
+  const patrones = palabras.map((p) => `%${paraLike(p)}%`);
+  const coincide = `p.busqueda LIKE ? ESCAPE '\\'`;
+  const consulta = (union) =>
+    env.DB.prepare(
+      `SELECT p.*, (SELECT count(*) FROM operaciones o WHERE o.producto_id = p.id) AS operaciones
+       FROM productos p
+       WHERE p.codigo_barras = ? OR (${palabras.map(() => coincide).join(union)})
+       ORDER BY (p.codigo_barras = ?) DESC, (${palabras.map(() => `(${coincide})`).join(' + ')}) DESC,
+         (p.busqueda LIKE ? ESCAPE '\\') DESC, operaciones DESC, length(p.nombre)
+       LIMIT 10`,
+    )
+      .bind(q, ...patrones, q, ...patrones, `${paraLike(q)}%`)
+      .all();
+  let { results } = await consulta(' AND ');
+  if (!results.length && palabras.length > 1) ({ results } = await consulta(' OR '));
   return json({ ok: true, productos: results });
 }
 
