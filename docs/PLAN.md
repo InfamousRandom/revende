@@ -79,10 +79,17 @@ Esquema inicial (ajustable):
 
 API (todas con `x-revende-clave`; precios y foto siguen sin clave):
 
-- [ ] `GET /api/productos?q=` (autocompletado por nombre, marca, modelo o código de barras) y
+- [x] `GET /api/productos?q=` (autocompletado por nombre, marca, modelo o código de barras) y
       `POST /api/productos`.
-- [ ] `POST /api/operaciones` y `PATCH /api/operaciones/:id` (registrar compra y luego venta);
+- [x] `POST /api/operaciones` y `PATCH /api/operaciones/:id` (registrar compra y luego venta);
       `GET /api/operaciones?estado=&producto_id=`.
+  - Código en `worker/historial.js` (utilidades compartidas en `worker/util.js`).
+  - Autocompletado: cada palabra debe aparecer, sin importar acentos ni orden; el código de barras
+    exacto va primero. Categoría guardada en minúsculas sin acentos para agrupar.
+  - Valores por defecto: si hay precio sin fecha, la fecha es hoy (hora de México); envío y otros
+    gastos en 0. Montos aceptan "$8,200". Las respuestas traen `estado`, `dias` y `ganancia`
+    (venta − compra − envío − otros gastos) calculados.
+  - También `GET /api/operaciones/:id`. Falta borrar operaciones (por si se registra mal).
 - [ ] `POST /api/capturas`.
 - [ ] `GET /api/referencias?producto_id=` o `?q=`: mis ventas de ese producto (precio, días para
       vender, condición, canal, descuento vs publicado); mediana, mínimo y máximo de mis ventas y

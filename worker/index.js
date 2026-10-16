@@ -1,5 +1,7 @@
 // Worker de Revende: sirve la app (archivos de ./out) y las rutas /api.
 import { DurableObject } from 'cloudflare:workers';
+import { json, normalizar } from './util.js';
+import { historial, esRutaHistorial } from './historial.js';
 const MODELO_DEFECTO = 'gemini-3-flash-preview';
 
 const instrucciones = (consulta) => `Eres un asistente para una persona que compra y revende articulos en Mexico.
@@ -29,7 +31,6 @@ Reglas:
 - Si no encuentras precios de usado, deja "usado" como lista vacia y el rango en 0.
 - Maximo 6 precios de nuevo y 6 de usado. Ignora accesorios, fundas y productos distintos.`;
 
-const json = (datos, status = 200) => Response.json(datos, { status });
 
 async function llamarGemini(env, cuerpo) {
   const modelo = env.GEMINI_MODELO || MODELO_DEFECTO;
@@ -111,9 +112,6 @@ const PALABRAS_PAQUETE = [
   'bundle', 'paquete', 'pack', 'combo', 'kit', 'aniversario', 'edicion limitada', 'limited edition',
   'mas', 'incluye', 'incluido', 'juego', 'juegos',
 ];
-
-const normalizar = (texto) =>
-  texto.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/\s+/g, ' ').trim();
 
 function mediana(numeros) {
   const orden = [...numeros].sort((a, b) => a - b);
@@ -459,6 +457,15 @@ export default {
         serpapi: Boolean(env.SERPAPI_KEY),
         cache: Boolean(env.CACHE),
       });
+    }
+
+    // Historial (D1): productos y operaciones. Protegido con clave.
+    if (esRutaHistorial(url.pathname)) {
+      try {
+        return await historial(request, env, url);
+      } catch (e) {
+        return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+      }
     }
 
     if (url.pathname.startsWith('/api/img/')) {
