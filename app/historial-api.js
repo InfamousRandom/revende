@@ -23,15 +23,19 @@ export class ErrorApi extends Error {
   }
 }
 
-export async function api(ruta, { metodo = 'GET', datos } = {}) {
+// `datos` se manda como JSON; `csv` como texto (importar).
+export async function api(ruta, { metodo = 'GET', datos, csv } = {}) {
   const clave = leerClave();
   if (!clave) throw new ErrorApi('Falta la clave de acceso', { clave: true });
   let r;
   try {
     r = await fetch(ruta, {
       method: metodo,
-      headers: { 'x-revende-clave': clave, ...(datos ? { 'content-type': 'application/json' } : {}) },
-      body: datos ? JSON.stringify(datos) : undefined,
+      headers: {
+        'x-revende-clave': clave,
+        ...(datos ? { 'content-type': 'application/json' } : csv ? { 'content-type': 'text/csv' } : {}),
+      },
+      body: datos ? JSON.stringify(datos) : csv,
     });
   } catch {
     throw new ErrorApi('Sin conexión. Revisa tu internet e intenta de nuevo.');
@@ -62,3 +66,24 @@ export const FUENTES = [
   ['ml_usado', 'ML usado'],
   ['otro', 'Otro'],
 ];
+
+// Descarga el respaldo CSV del historial (con la clave en el encabezado, no en la URL).
+export async function descargarRespaldo() {
+  let r;
+  try {
+    r = await fetch('/api/exportar', { headers: { 'x-revende-clave': leerClave() } });
+  } catch {
+    throw new ErrorApi('Sin conexión. Revisa tu internet e intenta de nuevo.');
+  }
+  if (r.status === 401) throw new ErrorApi('Clave de acceso incorrecta', { clave: true });
+  if (!r.ok) throw new ErrorApi('No se pudo descargar el respaldo.');
+  const nombre = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') || '')?.[1] || 'revende-historial.csv';
+  const enlace = document.createElement('a');
+  enlace.href = URL.createObjectURL(await r.blob());
+  enlace.download = nombre;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  setTimeout(() => URL.revokeObjectURL(enlace.href), 10000);
+  return nombre;
+}

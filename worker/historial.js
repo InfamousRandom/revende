@@ -1,6 +1,7 @@
 // Fase 3: historial en D1 (catálogo de productos y operaciones de compra/venta).
 // Todas las rutas exigen x-revende-clave: son datos de Pablo (ver CLAUDE.md).
 import { json, normalizar } from './util.js';
+import { escribirCsv, leerCsv } from './csv.js';
 
 const CONDICIONES = ['sellado', 'como_nuevo', 'usado_bueno', 'con_detalles'];
 const CANALES = ['en_persona', 'marketplace', 'otro'];
@@ -8,7 +9,7 @@ const MAX_TEXTO = 120;
 const MAX_NOTAS = 1000;
 const MAX_PESOS = 10_000_000;
 
-export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas)(\/|$)/.test(ruta);
+export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas|exportar|importar)(\/|$)/.test(ruta);
 
 const FUENTES = ['marketplace', 'ml_usado', 'otro'];
 
@@ -472,6 +473,189 @@ async function agregarPrecioNuevo(env, o) {
   return recordado?.precio ? { ...o, precio_nuevo_ref: recordado.precio } : o;
 }
 
+// ---------- Respaldo: exportar e importar CSV ----------
+
+const COLUMNAS_CSV = [
+  'producto', 'categoria', 'marca', 'modelo', 'variante', 'codigo_barras', 'condicion',
+  'precio_compra', 'fecha_compra', 'lugar_compra', 'precio_publicado', 'fecha_publicado',
+  'precio_venta', 'fecha_venta', 'canal', 'envio_mxn', 'otros_gastos_mxn', 'precio_nuevo_ref', 'notas',
+];
+const MAX_CSV_BYTES = 1024 * 1024;
+const MAX_FILAS_CSV = 2000;
+
+async function exportar(env) {
+  const { results } = await env.DB.prepare(
+    `SELECT o.*, p.nombre AS producto, p.categoria, p.marca, p.modelo, p.variante, p.codigo_barras
+     FROM operaciones o JOIN productos p ON p.id = o.producto_id
+     ORDER BY coalesce(o.fecha_venta, o.fecha_compra), o.id`,
+  ).all();
+  const csv = escribirCsv(COLUMNAS_CSV, results.map((o) => COLUMNAS_CSV.map((c) => o[c])));
+  return new Response(csv, {
+    headers: {
+      'content-type': 'text/csv; charset=utf-8',
+      'content-disposition': `attachment; filename="revende-historial-${hoyMexico()}.csv"`,
+      'cache-control': 'no-store',
+    },
+  });
+}
+
+// Nombres de columna aceptados (sin importar mayúsculas, acentos ni guiones bajos).
+const ALIAS_CSV = {
+  producto: ['producto', 'nombre', 'articulo'],
+  categoria: ['categoria'],
+  marca: ['marca'],
+  modelo: ['modelo'],
+  variante: ['variante'],
+  codigo_barras: ['codigo barras', 'codigo', 'codigo de barras'],
+  condicion: ['condicion'],
+  precio_compra: ['precio compra', 'compra', 'precio de compra'],
+  fecha_compra: ['fecha compra', 'fecha de compra'],
+  lugar_compra: ['lugar compra', 'lugar', 'lugar de compra'],
+  precio_publicado: ['precio publicado'],
+  fecha_publicado: ['fecha publicado', 'fecha de publicacion'],
+  precio_venta: ['precio venta', 'venta', 'precio de venta', 'precio'],
+  fecha_venta: ['fecha venta', 'fecha de venta', 'fecha'],
+  canal: ['canal', 'donde', 'donde se vendio'],
+  envio_mxn: ['envio mxn', 'envio'],
+  otros_gastos_mxn: ['otros gastos mxn', 'otros gastos', 'otros'],
+  precio_nuevo_ref: ['precio nuevo ref', 'precio nuevo'],
+  notas: ['notas', 'nota'],
+};
+const nombreColumna = (t) => normalizar(t).replace(/_/g, ' ').replace(/\s+/g, ' ');
+
+// "como nuevo" -> "como_nuevo"; "16/10/2026" -> "2026-10-16".
+const comoOpcion = (v) => normalizar(v).replace(/\s+/g, '_') || null;
+function comoFecha(v) {
+  const t = String(v ?? '').trim();
+  const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  return dmy ? `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}` : t;
+}
+const firma = (o) => [o.producto_id, o.precio_compra, o.fecha_compra, o.precio_venta, o.fecha_venta].join('|');
+// Una fila que solo trae la venta es la misma venta aunque en la base tenga compra registrada.
+const firmaVenta = (o) => [o.producto_id, o.precio_venta, o.fecha_venta].join('|');
+
+async function importar(request, env, url) {
+  // Primero se prueba sin guardar (?probar=1) para mostrar qué pasaría; luego se confirma.
+  const probar = url.searchParams.get('probar') === '1';
+  const contenido = await request.text();
+  if (contenido.length > MAX_CSV_BYTES) fallar('El archivo es demasiado grande (máximo 1 MB)');
+  const filas = leerCsv(contenido);
+  if (filas.length < 2) fallar('El archivo no tiene filas de datos');
+  if (filas.length - 1 > MAX_FILAS_CSV) fallar(`Máximo ${MAX_FILAS_CSV} filas por archivo`);
+
+  const indices = {};
+  filas[0].forEach((encabezado, i) => {
+    const n = nombreColumna(encabezado);
+    for (const [campo, alias] of Object.entries(ALIAS_CSV)) {
+      if (indices[campo] === undefined && (n === nombreColumna(campo) || alias.includes(n))) indices[campo] = i;
+    }
+  });
+  if (indices.producto === undefined) fallar('Falta la columna "producto"');
+  if (indices.precio_venta === undefined && indices.precio_compra === undefined) {
+    fallar('Falta la columna "precio_venta" o "precio_compra"');
+  }
+
+  const [{ results: productos }, { results: existentes }] = await Promise.all([
+    env.DB.prepare('SELECT id, nombre, codigo_barras FROM productos').all(),
+    env.DB.prepare('SELECT producto_id, precio_compra, fecha_compra, precio_venta, fecha_venta FROM operaciones').all(),
+  ]);
+  const porCodigo = new Map(productos.filter((p) => p.codigo_barras).map((p) => [p.codigo_barras, p.id]));
+  const porNombre = new Map(productos.map((p) => [normalizar(p.nombre), p.id]));
+  const vistas = new Set(existentes.map(firma));
+  const ventasVistas = new Set(existentes.filter((o) => o.fecha_venta).map(firmaVenta));
+  const nuevos = new Map(); // nombre normalizado -> datos del producto a crear
+  const listas = [];
+  const errores = [];
+  let repetidos = 0;
+
+  filas.slice(1).forEach((fila, i) => {
+    const linea = i + 2;
+    const v = (campo) => (indices[campo] === undefined ? undefined : fila[indices[campo]]?.trim() ?? '');
+    try {
+      const nombre = texto(v('producto'), 'Producto');
+      if (!nombre) fallar('falta el producto');
+      const crudo = {};
+      for (const campo of COLUMNAS_CSV.slice(6)) {
+        const valor = v(campo);
+        if (valor === undefined || valor === '') continue;
+        crudo[campo] = campo.startsWith('fecha') ? comoFecha(valor) : campo === 'condicion' || campo === 'canal' ? comoOpcion(valor) : valor;
+      }
+      // En un archivo, la fecha es obligatoria: "hoy" no tiene sentido para ventas pasadas.
+      if (crudo.precio_venta && !crudo.fecha_venta) fallar('falta la fecha de venta');
+      if (crudo.precio_compra && !crudo.fecha_compra) fallar('falta la fecha de compra');
+      const o = completarOperacion(limpiarOperacion(crudo));
+
+      const codigo = texto(v('codigo_barras'), 'Código de barras', 40)?.replace(/\s/g, '') || null;
+      const clave = normalizar(nombre);
+      let productoId = (codigo && porCodigo.get(codigo)) || porNombre.get(clave);
+      if (!productoId) {
+        if (!nuevos.has(clave)) {
+          const categoria = v('categoria') ? normalizar(texto(v('categoria'), 'Categoría')) || null : null;
+          nuevos.set(clave, {
+            nombre,
+            categoria,
+            marca: texto(v('marca'), 'Marca'),
+            modelo: texto(v('modelo'), 'Modelo'),
+            variante: texto(v('variante'), 'Variante'),
+            codigo_barras: codigo && !porCodigo.has(codigo) ? codigo : null,
+          });
+        }
+        productoId = `nuevo:${clave}`;
+      }
+      o.producto_id = productoId;
+      const f = firma(o);
+      const soloVenta = o.precio_compra == null && o.precio_venta != null;
+      if (vistas.has(f) || (soloVenta && ventasVistas.has(firmaVenta(o)))) {
+        repetidos++;
+        return;
+      }
+      vistas.add(f);
+      if (o.precio_venta != null) ventasVistas.add(firmaVenta(o));
+      listas.push(o);
+    } catch (e) {
+      if (!(e instanceof ErrorDatos)) throw e;
+      errores.push({ linea, error: e.message });
+    }
+  });
+
+  const resumen = {
+    registros: listas.length,
+    productos_nuevos: nuevos.size,
+    repetidos,
+    errores: errores.slice(0, 20),
+    con_error: errores.length,
+  };
+  if (probar || !listas.length) return json({ ok: true, probado: true, ...resumen });
+
+  // Crear productos nuevos y luego las operaciones, en lotes.
+  const idsNuevos = new Map();
+  const listaNuevos = [...nuevos.entries()];
+  for (let i = 0; i < listaNuevos.length; i += 50) {
+    const lote = listaNuevos.slice(i, i + 50);
+    const respuestas = await env.DB.batch(
+      lote.map(([, p]) =>
+        env.DB.prepare(
+          `INSERT INTO productos (nombre, categoria, marca, modelo, variante, codigo_barras, busqueda)
+           VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+        ).bind(p.nombre, p.categoria, p.marca, p.modelo, p.variante, p.codigo_barras, textoBusqueda(p)),
+      ),
+    );
+    lote.forEach(([clave], j) => idsNuevos.set(`nuevo:${clave}`, respuestas[j].results[0].id));
+  }
+  for (let i = 0; i < listas.length; i += 50) {
+    await env.DB.batch(
+      listas.slice(i, i + 50).map((o) => {
+        const fila = { ...o, producto_id: idsNuevos.get(o.producto_id) ?? o.producto_id };
+        const campos = CAMPOS_OPERACION.filter((k) => fila[k] !== undefined);
+        return env.DB.prepare(
+          `INSERT INTO operaciones (${campos.join(', ')}) VALUES (${campos.map(() => '?').join(', ')})`,
+        ).bind(...campos.map((k) => fila[k]));
+      }),
+    );
+  }
+  return json({ ok: true, importado: true, ...resumen });
+}
+
 // ---------- Enrutador ----------
 
 export async function historial(request, env, url) {
@@ -490,6 +674,8 @@ export async function historial(request, env, url) {
     }
     if (ruta === '/api/referencias' && metodo === 'GET') return await referencias(env, url);
     if (ruta === '/api/capturas' && metodo === 'POST') return await crearCaptura(request, env);
+    if (ruta === '/api/exportar' && metodo === 'GET') return await exportar(env);
+    if (ruta === '/api/importar' && metodo === 'POST') return await importar(request, env, url);
     const unaOperacion = /^\/api\/operaciones\/(\d+)$/.exec(ruta);
     if (unaOperacion) {
       const id = Number(unaOperacion[1]);

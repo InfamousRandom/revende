@@ -680,3 +680,10 @@ body {
 .fila-con-accion .fila-operacion { flex: 1; min-width: 0; border-top: 0; grid-template-columns: minmax(0, 1fr) auto; }
 .boton-vender { min-height: 44px; padding: 0 4px; font: inherit; font-weight: 600; background: none; border: 0; cursor: pointer; }
 .boton-borrar { background: transparent; color: var(--pierde); border-color: var(--pierde); }
+
+/* Respaldo */
+.respaldo { margin-top: 24px; }
+.respaldo .boton { width: 100%; }
+.importacion { display: flex; flex-direction: column; gap: 8px; }
+.lista-resumen { margin: 0; padding-left: 18px; }
+.errores-importacion { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--tenue); }

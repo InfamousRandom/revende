@@ -99,7 +99,14 @@ API (todas con `x-revende-clave`; precios y foto siguen sin clave):
     (sin "gb", "de", etc.), para no mezclar artículos. Devuelve `otros` para elegir.
   - El precio nuevo típico de cada búsqueda se recuerda por producto en KV (`nuevo:<id>`, 30 días)
     y se guarda solo como `precio_nuevo_ref` al registrar la venta.
-- [ ] `GET /api/exportar` (CSV) y `POST /api/importar` (CSV de ventas pasadas).
+- [x] `GET /api/exportar` (CSV) y `POST /api/importar` (CSV de ventas pasadas).
+  - `worker/csv.js` sin dependencias: separador , o ; (Excel en español), comillas, BOM para acentos
+    y celdas que empiezan con = + - @ protegidas contra fórmulas.
+  - Importar acepta encabezados en español con o sin acentos y fechas AAAA-MM-DD o DD/MM/AAAA; la
+    fecha es obligatoria por fila. Productos por código de barras o nombre; si no existen se crean.
+  - `?probar=1` muestra registros, productos nuevos, repetidos y errores por fila sin guardar.
+    Repetidos: misma compra y venta, o misma venta (producto, precio, fecha) si la fila no trae compra.
+    Reimportar el propio respaldo no duplica nada. Máximo 1 MB y 2000 filas.
 
 Pantallas:
 
@@ -127,7 +134,7 @@ Pantallas:
 - [x] Clave de acceso pedida una sola vez (ventanita al abrir el historial), guardada en el celular.
 - [x] Captura rápida de precio de usado desde la tarjeta de resultados (`app/CapturaUsado.js`):
       "Anotar un precio de usado que viste" en Buscar, 3 acciones; se ve en "Tus ventas".
-- [ ] Exportar e importar CSV.
+- [x] Exportar e importar CSV: sección "Respaldo" al final del Historial (`app/Respaldo.js`).
 
 Terminado cuando: registro una venta en menos de 30 s; al buscar ese producto veo mi venta con días
 para vender; y para un producto nuevo de una categoría con ventas veo una estimación por el factor

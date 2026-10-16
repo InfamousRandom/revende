@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import SelectorProducto from './SelectorProducto';
+import Respaldo from './Respaldo';
 import { api, CANALES, CONDICIONES, guardarClave, hoy, leerClave } from './historial-api';
 
 const pesos = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
@@ -218,6 +219,7 @@ export default function Historial({ prefill, onPrefillUsado }) {
             </ul>
           )}
           {t?.registros > datos.operaciones.length && <p className="precios-pie">Se muestran los {datos.operaciones.length} más recientes; los totales cuentan todo.</p>}
+          <Respaldo onImportado={terminar} onError={manejarError} />
         </>
       )}
 
