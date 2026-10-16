@@ -89,7 +89,9 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
     historial, y la recuerda en el celular.
 - Cuidar la cuota de SerpApi: cachear resultados en KV por consulta normalizada (24 h) y no
   repetir búsquedas automáticas. Nunca disparar búsquedas al escribir; solo al confirmar.
-- Nunca mostrar un precio sin su fuente (tienda + link). Nunca inventar ni estimar precios.
+- Nunca mostrar un precio sin su fuente (tienda + link). Nunca inventar ni estimar precios de
+  mercado. Única excepción: la estimación por factor de categoría de la Fase 3 (a partir de las
+  ventas de Pablo), siempre etiquetada con su origen.
 - Pablo vende en persona o por Marketplace: no hay comisiones; no volver a agregarlas (ni en la
   calculadora ni en el historial). El historial sí guarda el canal donde se vendió (en persona,
   Marketplace, otro) solo para comparar.

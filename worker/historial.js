@@ -8,7 +8,19 @@ const MAX_TEXTO = 120;
 const MAX_NOTAS = 1000;
 const MAX_PESOS = 10_000_000;
 
-export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones)(\/|$)/.test(ruta);
+export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias)(\/|$)/.test(ruta);
+
+const DIAS_REFERENCIA = 365; // ventas y capturas de los últimos 12 meses
+const NUEVO_REF_SEGUNDOS = 30 * 24 * 60 * 60; // precio nuevo recordado por producto (KV)
+const claveNuevo = (productoId) => `nuevo:${productoId}`;
+
+function mediana(numeros) {
+  const orden = [...numeros].sort((a, b) => a - b);
+  const mitad = Math.floor(orden.length / 2);
+  return orden.length % 2 ? orden[mitad] : (orden[mitad - 1] + orden[mitad]) / 2;
+}
+const resumir = (precios) =>
+  precios.length ? { n: precios.length, mediana: Math.round(mediana(precios)), min: Math.min(...precios), max: Math.max(...precios) } : null;
 
 // ---------- Utilidades ----------
 
@@ -86,26 +98,49 @@ async function buscarProductos(env, url) {
     ).all();
     return json({ ok: true, productos: results });
   }
-  // Primero exige todas las palabras (en cualquier orden): "slim playstation" encuentra
-  // "PlayStation 5 Slim". Si nada coincide, acepta cualquiera y ordena por cuántas coinciden:
-  // así "ps5 slim" encuentra "PlayStation 5 Slim" aunque "ps5" no esté escrito.
+  return json({ ok: true, productos: await productosQueCoinciden(env, q) });
+}
+
+// Primero exige todas las palabras (en cualquier orden): "slim playstation" encuentra
+// "PlayStation 5 Slim". Si nada coincide, acepta cualquiera y ordena por cuántas coinciden:
+// así "ps5 slim" encuentra "PlayStation 5 Slim" aunque "ps5" no esté escrito.
+// Cada resultado trae `aciertos` (palabras que coinciden) y `palabras` (total buscado).
+async function productosQueCoinciden(env, q) {
   const palabras = q.split(' ').slice(0, 6);
   const patrones = palabras.map((p) => `%${paraLike(p)}%`);
   const coincide = `p.busqueda LIKE ? ESCAPE '\\'`;
+  const aciertos = palabras.map(() => `(${coincide})`).join(' + ');
   const consulta = (union) =>
     env.DB.prepare(
-      `SELECT p.*, (SELECT count(*) FROM operaciones o WHERE o.producto_id = p.id) AS operaciones
+      `SELECT p.*, (SELECT count(*) FROM operaciones o WHERE o.producto_id = p.id) AS operaciones,
+         (${aciertos}) AS aciertos, (p.codigo_barras = ?) AS por_codigo
        FROM productos p
        WHERE p.codigo_barras = ? OR (${palabras.map(() => coincide).join(union)})
-       ORDER BY (p.codigo_barras = ?) DESC, (${palabras.map(() => `(${coincide})`).join(' + ')}) DESC,
-         (p.busqueda LIKE ? ESCAPE '\\') DESC, operaciones DESC, length(p.nombre)
+       ORDER BY por_codigo DESC, aciertos DESC, (p.busqueda LIKE ? ESCAPE '\\') DESC, operaciones DESC, length(p.nombre)
        LIMIT 10`,
     )
-      .bind(q, ...patrones, q, ...patrones, `${paraLike(q)}%`)
+      .bind(...patrones, q, q, ...patrones, `${paraLike(q)}%`)
       .all();
   let { results } = await consulta(' AND ');
   if (!results.length && palabras.length > 1) ({ results } = await consulta(' OR '));
-  return json({ ok: true, productos: results });
+  return results.map((p) => ({ ...p, palabras: palabras.length }));
+}
+
+// Palabras que no distinguen un producto de otro ("128 gb" no hace igual a un iPhone y un Galaxy).
+const PALABRAS_GENERICAS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'con', 'y', 'en', 'para', 'sin', 'gb', 'tb', 'mb', 'nuevo', 'usado', 'original']);
+
+// Para referencias hay que estar seguros de que es el mismo artículo: código de barras exacto o
+// al menos 60 % de las palabras importantes de la búsqueda.
+async function productoParaReferencias(env, q) {
+  const importantes = q.split(' ').filter((p) => p.length > 1 && !PALABRAS_GENERICAS.has(p));
+  if (!importantes.length) return { producto: null, otros: [] };
+  const candidatos = (await productosQueCoinciden(env, importantes.join(' '))).filter(
+    (p) => p.por_codigo || p.aciertos / p.palabras >= 0.6,
+  );
+  return {
+    producto: candidatos[0] || null,
+    otros: candidatos.slice(1, 4).map((p) => ({ id: p.id, nombre: p.nombre })),
+  };
 }
 
 async function crearProducto(request, env) {
@@ -206,7 +241,7 @@ const leerOperacion = (env, id) =>
 async function crearOperacion(request, env) {
   const c = await leerCuerpo(request);
   if (c.producto_id === undefined) fallar('Elige un producto');
-  const o = completarOperacion(limpiarOperacion(c));
+  const o = await agregarPrecioNuevo(env, completarOperacion(limpiarOperacion(c)));
   const existe = await env.DB.prepare('SELECT id FROM productos WHERE id = ?').bind(o.producto_id).first();
   if (!existe) return json({ ok: false, error: 'Ese producto no existe' }, 404);
 
@@ -228,7 +263,7 @@ async function actualizarOperacion(request, env, id) {
     const existe = await env.DB.prepare('SELECT id FROM productos WHERE id = ?').bind(cambios.producto_id).first();
     if (!existe) return json({ ok: false, error: 'Ese producto no existe' }, 404);
   }
-  const o = completarOperacion({ ...actual, ...cambios });
+  const o = await agregarPrecioNuevo(env, completarOperacion({ ...actual, ...cambios }));
   const campos = CAMPOS_OPERACION;
   await env.DB.prepare(
     `UPDATE operaciones SET ${campos.map((k) => `${k} = ?`).join(', ')},
@@ -263,6 +298,105 @@ async function listarOperaciones(env, url) {
   return json({ ok: true, operaciones: results });
 }
 
+// ---------- Referencias: lo que ya vendí de este artículo ----------
+
+async function referencias(env, url) {
+  const productoId = url.searchParams.get('producto_id');
+  const q = normalizar(url.searchParams.get('q') || '').slice(0, MAX_TEXTO);
+  // Precio nuevo típico de la Fase 2A (lo manda la app tras buscar precios). Se recuerda por
+  // producto para guardarlo en cada venta como precio_nuevo_ref, sin gastar búsquedas.
+  const precioNuevo = pesos(url.searchParams.get('precio_nuevo'), 'precio_nuevo') || null;
+
+  let producto = null;
+  let otros = [];
+  if (productoId) {
+    const id = Number(productoId);
+    if (!Number.isInteger(id) || id <= 0) fallar('producto_id inválido');
+    producto = await env.DB.prepare('SELECT * FROM productos WHERE id = ?').bind(id).first();
+  } else if (q) {
+    ({ producto, otros } = await productoParaReferencias(env, q));
+  } else fallar('Indica producto_id o q');
+  if (!producto) return json({ ok: true, producto: null });
+
+  if (precioNuevo && env.CACHE) {
+    await env.CACHE.put(claveNuevo(producto.id), JSON.stringify({ precio: precioNuevo, fecha: hoyMexico() }), {
+      expirationTtl: NUEVO_REF_SEGUNDOS,
+    });
+  }
+
+  const desde = new Date(Date.now() - DIAS_REFERENCIA * 86400000).toISOString().slice(0, 10);
+  const [{ results: ventas }, { results: capturas }] = await Promise.all([
+    env.DB.prepare(
+      `SELECT id, precio_venta, fecha_venta, condicion, canal, precio_publicado,
+         CASE WHEN precio_publicado IS NOT NULL THEN precio_publicado - precio_venta END AS descuento,
+         CAST(julianday(fecha_venta) - julianday(fecha_compra) AS INTEGER) AS dias
+       FROM operaciones
+       WHERE producto_id = ? AND fecha_venta IS NOT NULL AND fecha_venta >= ?
+       ORDER BY fecha_venta DESC, id DESC`,
+    )
+      .bind(producto.id, desde)
+      .all(),
+    env.DB.prepare(
+      `SELECT id, precio, fecha, fuente, condicion, url FROM capturas_usado
+       WHERE producto_id = ? AND fecha >= ? ORDER BY fecha DESC, id DESC`,
+    )
+      .bind(producto.id, desde)
+      .all(),
+  ]);
+
+  const conDias = ventas.filter((v) => v.dias != null);
+  const resumen = {
+    ventas: resumir(ventas.map((v) => v.precio_venta)),
+    capturas: resumir(capturas.map((c) => c.precio)),
+    todo: resumir([...ventas.map((v) => v.precio_venta), ...capturas.map((c) => c.precio)]),
+    dias_mediana: conDias.length ? Math.round(mediana(conDias.map((v) => v.dias))) : null,
+  };
+
+  // Precio contra rapidez: la venta más rápida y la más cara (si son distintas).
+  let contraste = null;
+  if (conDias.length >= 2) {
+    const rapida = conDias.reduce((a, b) => (b.dias < a.dias || (b.dias === a.dias && b.precio_venta > a.precio_venta) ? b : a));
+    const cara = conDias.reduce((a, b) => (b.precio_venta > a.precio_venta || (b.precio_venta === a.precio_venta && b.dias < a.dias) ? b : a));
+    if (rapida.id !== cara.id && cara.dias > rapida.dias) {
+      contraste = [rapida, cara].map((v) => ({ precio: v.precio_venta, dias: v.dias }));
+    }
+  }
+
+  // Sin ventas de este producto: estimar con lo que suelo sacar en su categoría respecto al
+  // precio nuevo. Es la única estimación permitida (ver CLAUDE.md) y siempre dice de dónde sale.
+  let estimacion = null;
+  if (!ventas.length && producto.categoria) {
+    const { results } = await env.DB.prepare(
+      `SELECT CAST(o.precio_venta AS REAL) / o.precio_nuevo_ref AS factor
+       FROM operaciones o JOIN productos p ON p.id = o.producto_id
+       WHERE p.categoria = ? AND o.precio_venta IS NOT NULL AND o.precio_nuevo_ref IS NOT NULL`,
+    )
+      .bind(producto.categoria)
+      .all();
+    const recordado = env.CACHE ? await env.CACHE.get(claveNuevo(producto.id), 'json') : null;
+    const nuevo = precioNuevo || recordado?.precio || null;
+    if (results.length) {
+      const factor = mediana(results.map((r) => r.factor));
+      estimacion = {
+        categoria: producto.categoria,
+        factor: Math.round(factor * 100) / 100,
+        n: results.length,
+        precio_nuevo: nuevo,
+        estimado: nuevo ? Math.round((factor * nuevo) / 10) * 10 : null,
+      };
+    }
+  }
+
+  return json({ ok: true, producto, otros, ventas, capturas, resumen, contraste, estimacion });
+}
+
+// Si una venta no trae precio nuevo de referencia, usa el último recordado para ese producto.
+async function agregarPrecioNuevo(env, o) {
+  if (o.precio_venta == null || o.precio_nuevo_ref != null || !env.CACHE) return o;
+  const recordado = await env.CACHE.get(claveNuevo(o.producto_id), 'json');
+  return recordado?.precio ? { ...o, precio_nuevo_ref: recordado.precio } : o;
+}
+
 // ---------- Enrutador ----------
 
 export async function historial(request, env, url) {
@@ -279,6 +413,7 @@ export async function historial(request, env, url) {
       if (metodo === 'GET') return await listarOperaciones(env, url);
       if (metodo === 'POST') return await crearOperacion(request, env);
     }
+    if (ruta === '/api/referencias' && metodo === 'GET') return await referencias(env, url);
     const unaOperacion = /^\/api\/operaciones\/(\d+)$/.exec(ruta);
     if (unaOperacion) {
       const id = Number(unaOperacion[1]);

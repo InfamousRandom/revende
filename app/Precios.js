@@ -115,7 +115,7 @@ function Resumen({ titulo, grupo, onUsar }) {
       <span className="precios-etiqueta">{titulo} típico</span>
       <span className="precios-cifra">{pesos.format(mediana)}</span>
       <span className="resumen-rango">{min === max ? 'un solo precio' : `${pesos.format(min)} – ${pesos.format(max)}`}</span>
-      <button type="button" className="boton boton-referencia" onClick={() => onUsar(mediana)}>
+      <button type="button" className="boton boton-referencia" onClick={() => onUsar(mediana, `precio típico ${titulo.toLowerCase()} en Google Shopping`)}>
         Usar precio
       </button>
     </div>

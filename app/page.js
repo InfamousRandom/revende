@@ -4,6 +4,8 @@ import dynamic from 'next/dynamic';
 import Precios from './Precios';
 import Identificacion, { reducirImagen } from './Foto';
 import Historial from './Historial';
+import TusVentas from './TusVentas';
+import { api, leerClave } from './historial-api';
 
 const CamaraFoto = dynamic(() => import('./CamaraFoto'), { ssr: false });
 
@@ -85,7 +87,7 @@ export default function Inicio() {
   const [busqueda, setBusqueda] = useState('');
   const [escaneando, setEscaneando] = useState(false);
   // Venta en persona o Marketplace: sin comisión. Solo gastos propios (gasolina, envío, limpieza).
-  const [calc, setCalc] = useState({ venta: '', gastos: '', margen: '20', compra: '' });
+  const [calc, setCalc] = useState({ venta: '', gastos: '', margen: '20', compra: '', origen: '' });
   const [listo, setListo] = useState(false);
   const [precios, setPrecios] = useState({ fase: 'inactivo' });
   const [cuota, setCuota] = useState(null);
@@ -94,6 +96,7 @@ export default function Inicio() {
   const limpiarPrefill = useCallback(() => setPrefillCompra(null), []);
   const fotoRef = useRef(null);
   const [ident, setIdent] = useState({ fase: 'inactivo' });
+  const [refs, setRefs] = useState({ fase: 'inactivo' }); // tarjeta "Tus ventas"
   const [tomandoFoto, setTomandoFoto] = useState(false);
 
   // Cargar lo guardado en este celular
@@ -117,7 +120,8 @@ export default function Inicio() {
     if (listo) cargarCuota();
   }, [listo]);
 
-  const set = (campo) => (e) => setCalc((c) => ({ ...c, [campo]: e.target.value }));
+  // Escribir a mano el precio de venta borra la nota de dónde salió.
+  const set = (campo) => (e) => setCalc((c) => ({ ...c, [campo]: e.target.value, ...(campo === 'venta' ? { origen: '' } : {}) }));
 
   const r = useMemo(() => {
     const V = num(calc.venta);
@@ -136,6 +140,8 @@ export default function Inicio() {
     e?.preventDefault();
     if (q.length < 2 || precios.fase === 'cargando') return;
     setPrecios({ fase: 'cargando', consulta: q });
+    setRefs({ fase: 'inactivo' });
+    let precioNuevo = null;
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), ESPERA_MAXIMA_MS);
     try {
@@ -148,6 +154,7 @@ export default function Inicio() {
       const datos = await r.json().catch(() => null);
       if (r.ok && datos?.ok) {
         setPrecios({ fase: 'ok', consulta: q, datos });
+        precioNuevo = datos.nuevos?.rango?.mediana || null;
         if (!datos.cache) cargarCuota();
       } else {
         if (r.status === 429) cargarCuota();
@@ -166,6 +173,29 @@ export default function Inicio() {
       });
     } finally {
       clearTimeout(reloj);
+    }
+    cargarReferencias({ q, precioNuevo });
+  }
+
+  // "Tus ventas": solo si ya está guardada la clave del historial (no la pide desde Buscar).
+  // Manda el precio nuevo típico para que el Worker lo recuerde y estime si nunca lo has vendido.
+  async function cargarReferencias({ q: texto, productoId, precioNuevo }) {
+    if (!leerClave()) return;
+    const params = new URLSearchParams(productoId ? { producto_id: productoId } : { q: texto });
+    if (precioNuevo) params.set('precio_nuevo', precioNuevo);
+    setRefs({ fase: 'cargando', consulta: texto });
+    try {
+      const datos = await api(`/api/referencias?${params}`);
+      setRefs({ fase: 'ok', consulta: texto, datos });
+      // La calculadora usa por defecto tus ventas (o la estimación), si no tiene ya un precio.
+      const sugerido = datos.resumen?.ventas
+        ? { valor: datos.resumen.ventas.mediana, origen: `tus ${datos.resumen.ventas.n} ventas de este artículo` }
+        : datos.estimacion?.estimado
+          ? { valor: datos.estimacion.estimado, origen: `estimado: ${Math.round(datos.estimacion.factor * 100)} % del precio nuevo, según tus ventas de ${datos.estimacion.categoria}` }
+          : null;
+      if (sugerido) setCalc((c) => (c.venta ? c : { ...c, venta: String(sugerido.valor), origen: sugerido.origen }));
+    } catch {
+      setRefs({ fase: 'inactivo' });
     }
   }
 
@@ -224,8 +254,8 @@ export default function Inicio() {
     window.scrollTo(0, 0);
   };
 
-  const usarReferencia = (valor) => {
-    setCalc((c) => ({ ...c, venta: String(valor) }));
+  const usarReferencia = (valor, origen = '') => {
+    setCalc((c) => ({ ...c, venta: String(valor), origen }));
     irA('calcular');
   };
 
@@ -288,6 +318,13 @@ export default function Inicio() {
                     </p>
                   )}
                   {/* Si el texto cambió, el resultado ya no corresponde: se oculta hasta volver a buscar. */}
+                  {refs.consulta === q && (
+                    <TusVentas
+                      estado={refs}
+                      onUsar={usarReferencia}
+                      onElegirOtro={(productoId) => cargarReferencias({ q, productoId })}
+                    />
+                  )}
                   {precios.consulta === q && (
                     <Precios key={precios.datos?.fecha || precios.fase} estado={precios} onUsar={usarReferencia} />
                   )}
@@ -321,7 +358,15 @@ export default function Inicio() {
             <h2>¿Cuánto pagar?</h2>
 
             <div className="campos">
-              <Campo id="venta" etiqueta="Precio de venta esperado" prefijo="$" valor={calc.venta} onChange={set('venta')} grande />
+              <Campo
+                id="venta"
+                etiqueta="Precio de venta esperado"
+                prefijo="$"
+                valor={calc.venta}
+                onChange={set('venta')}
+                grande
+                ayuda={calc.origen ? `De: ${calc.origen}` : undefined}
+              />
               <Campo id="gastos" etiqueta="Tus gastos" prefijo="$" valor={calc.gastos} onChange={set('gastos')} ayuda="Gasolina, envío, limpieza" />
               <Campo id="margen" etiqueta="Ganancia que buscas" sufijo="%" valor={calc.margen} onChange={set('margen')} ayuda="Sobre el precio de venta" />
             </div>

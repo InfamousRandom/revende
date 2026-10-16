@@ -91,10 +91,14 @@ API (todas con `x-revende-clave`; precios y foto siguen sin clave):
     (venta − compra − envío − otros gastos) calculados.
   - También `GET /api/operaciones/:id`. Falta borrar operaciones (por si se registra mal).
 - [ ] `POST /api/capturas`.
-- [ ] `GET /api/referencias?producto_id=` o `?q=`: mis ventas de ese producto (precio, días para
+- [x] `GET /api/referencias?producto_id=` o `?q=`: mis ventas de ese producto (precio, días para
       vender, condición, canal, descuento vs publicado); mediana, mínimo y máximo de mis ventas y
       capturas (últimos 12 meses); si no hay ventas del producto, factor de la categoría = mediana de
       (precio_venta / precio_nuevo_ref) y estimación con el precio nuevo actual de la Fase 2A.
+  - Con `q` solo acepta un producto si coincide el código o el 60 % de las palabras importantes
+    (sin "gb", "de", etc.), para no mezclar artículos. Devuelve `otros` para elegir.
+  - El precio nuevo típico de cada búsqueda se recuerda por producto en KV (`nuevo:<id>`, 30 días)
+    y se guarda solo como `precio_nuevo_ref` al registrar la venta.
 - [ ] `GET /api/exportar` (CSV) y `POST /api/importar` (CSV de ventas pasadas).
 
 Pantallas:
@@ -108,9 +112,9 @@ Pantallas:
   - Atajo "Lo compré" en Calcular: abre la compra con el nombre buscado y el precio que te piden.
   - Autocompletado: si no coinciden todas las palabras, busca con cualquiera ("ps5 slim" encuentra
     "PlayStation 5 Slim"). Falta: editar o borrar una operación mal registrada.
-- [ ] Al buscar un artículo: tarjeta "Tus ventas" arriba de los precios nuevos, con el contraste
+- [x] Al buscar un artículo: tarjeta "Tus ventas" arriba de los precios nuevos, con el contraste
       precio contra rapidez (ej. "$7,200 en 3 días · $7,800 en 21 días").
-- [ ] La calculadora usa como precio de venta esperado la mediana de mis ventas, o la estimación por
+- [x] La calculadora usa como precio de venta esperado la mediana de mis ventas, o la estimación por
       categoría si no hay ventas, indicando de dónde salió el número.
 - [ ] Pantalla "Historial": búsqueda, filtros (categoría, vendido o en inventario), ganancia real,
       margen, días promedio para vender y dinero parado en inventario.
