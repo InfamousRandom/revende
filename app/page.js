@@ -7,6 +7,7 @@ import Historial from './Historial';
 import TusVentas from './TusVentas';
 import CapturaUsado from './CapturaUsado';
 import Checklist from './Checklist';
+import VistaRapida from './VistaRapida';
 import { api } from './historial-api';
 
 const CamaraFoto = dynamic(() => import('./CamaraFoto'), { ssr: false });
@@ -50,7 +51,8 @@ const GRUPOS = [
 ];
 
 const CLAVE_CALC = 'revende:calculadora';
-const ESPERA_MAXIMA_MS = 20000;
+const ESPERA_MAXIMA_MS = 30000; // precios
+const ESPERA_FOTO_MS = 60000; // Google Lens a veces tarda más de 30 s
 const POCAS_BUSQUEDAS = 25;
 const fechaCorta = (iso) => {
   const d = new Date(`${iso}T12:00:00`);
@@ -94,6 +96,7 @@ export default function Inicio() {
   const [precios, setPrecios] = useState({ fase: 'inactivo' });
   const [cuota, setCuota] = useState(null);
   const [vista, setVista] = useState('buscar');
+  const [modo, setModo] = useState('rapida'); // la rápida siempre al abrir (pedido de Pablo)
   const [prefillCompra, setPrefillCompra] = useState(null);
   const limpiarPrefill = useCallback(() => setPrefillCompra(null), []);
   const fotoRef = useRef(null);
@@ -204,14 +207,14 @@ export default function Inicio() {
     }
   }
 
-  // Foto -> Google Lens -> candidatos. No busca precios solo: el usuario elige el nombre y confirma.
+  // Foto -> Google Lens -> nombre con más coincidencias -> precios (todo solo).
   async function identificarFoto(foto) {
     setTomandoFoto(false);
     if (ident.vista) URL.revokeObjectURL(ident.vista);
     const vista = URL.createObjectURL(foto);
     setIdent({ fase: 'cargando', vista });
     const control = new AbortController();
-    const reloj = setTimeout(() => control.abort(), 30000);
+    const reloj = setTimeout(() => control.abort(), ESPERA_FOTO_MS);
     try {
       const reducida = await reducirImagen(foto);
       const r = await fetch('/api/identificar', {
@@ -275,10 +278,38 @@ export default function Inicio() {
   return (
     <>
       <main className="app">
-        {vista === 'buscar' && (
+        {vista === 'buscar' && modo === 'rapida' && (
           <>
             <header className="cabecera">
-              <h1 className="marca">Revende</h1>
+              <div className="marca-fila">
+                <h1 className="marca">Revende</h1>
+                <SelectorModo modo={modo} onCambiar={setModo} />
+              </div>
+            </header>
+            <VistaRapida
+              busqueda={busqueda}
+              setBusqueda={setBusqueda}
+              onBuscar={buscarPrecios}
+              onFoto={() => setTomandoFoto(true)}
+              ident={ident}
+              onElegir={elegirCandidato}
+              precios={precios}
+              refs={refs}
+              onDetalle={() => {
+                setModo('completa');
+                window.scrollTo(0, 0);
+              }}
+            />
+          </>
+        )}
+
+        {vista === 'buscar' && modo === 'completa' && (
+          <>
+            <header className="cabecera">
+              <div className="marca-fila">
+                <h1 className="marca">Revende</h1>
+                <SelectorModo modo={modo} onCambiar={setModo} />
+              </div>
               <form className="buscador" role="search" onSubmit={buscarPrecios}>
                 <label htmlFor="busqueda" className="sr-only">
                   Artículo, modelo o código de barras
@@ -306,7 +337,6 @@ export default function Inicio() {
                   </svg>
                   <span>Código</span>
                 </button>
-                <input ref={fotoRef} type="file" accept="image/*" hidden onChange={elegirDeGaleria} />
               </form>
             </header>
 
@@ -440,6 +470,8 @@ export default function Inicio() {
 
       </main>
 
+      <input ref={fotoRef} type="file" accept="image/*" hidden onChange={elegirDeGaleria} />
+
       {tomandoFoto && (
         <CamaraFoto
           onFoto={identificarFoto}
@@ -478,6 +510,22 @@ export default function Inicio() {
         ))}
       </nav>
     </>
+  );
+}
+
+// Vista rápida (lo esencial para comprar en persona) o completa (todo el detalle).
+function SelectorModo({ modo, onCambiar }) {
+  return (
+    <div className="selector selector-modo" role="tablist" aria-label="Tipo de vista">
+      {[
+        ['rapida', 'Rápida'],
+        ['completa', 'Completa'],
+      ].map(([id, nombre]) => (
+        <button key={id} type="button" role="tab" aria-selected={modo === id} className={modo === id ? 'activo' : ''} onClick={() => onCambiar(id)}>
+          {nombre}
+        </button>
+      ))}
+    </div>
   );
 }
 

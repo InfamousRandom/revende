@@ -764,3 +764,26 @@ body {
   border-radius: 4px;
   vertical-align: 1px;
 }
+
+/* ---------- Vista rápida ---------- */
+.marca-fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.marca-fila .marca { margin: 0; }
+.selector-modo { margin: 0; width: 180px; }
+.selector-modo button { height: 34px; font-size: 0.9rem; }
+.rapida { display: flex; flex-direction: column; gap: 12px; padding-top: 16px; }
+.rapida-entrada { display: flex; flex-direction: column; gap: 8px; }
+.rapida-foto { display: flex; align-items: center; justify-content: center; gap: 10px; height: 64px; font-size: 1.15rem; }
+.rapida-foto svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linejoin: round; }
+.rapida-resultado { display: flex; flex-direction: column; gap: 12px; margin-top: 0; }
+.rapida-precio { display: flex; flex-direction: column; padding: 12px; background: var(--fondo); border-radius: 10px; }
+.rapida-precio .precios-cifra { font-size: clamp(2.4rem, 13vw, 3.2rem); }
+.rapida-mia { margin-top: 6px; font-size: 0.9rem; font-weight: 600; }
+.rapida-ganancia { display: flex; flex-direction: column; padding: 12px 14px; border-radius: 10px; border: 2px solid; }
+.rapida-ganancia strong { font-family: var(--display); font-size: 1.8rem; line-height: 1.1; }
+.rapida-ganancia span { font-size: 0.9rem; }
+.rapida-ganancia.gana { color: var(--gana); border-color: var(--gana); }
+.rapida-ganancia.pierde { color: var(--pierde); border-color: var(--pierde); }
+.rapida-alerta { margin: 0; font-size: 0.9rem; }
+.rapida-acciones { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rapida-acciones .boton { width: 100%; }
+.camara-cambiar { align-self: center; min-height: 40px; padding: 0 16px; font: inherit; font-weight: 600; color: #fff; background: transparent; border: 1.5px solid #fff; border-radius: 999px; cursor: pointer; }

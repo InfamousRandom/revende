@@ -192,6 +192,23 @@ candidatos y lleva a sus precios y mi historial con dos toques.
       del nombre ("iPhone", "PS5", "Jordan"); se puede cambiar. Las marcas no se guardan: son por
       revisión y se reinician al buscar otro artículo.
 
+## Vista rápida (pedido de Pablo, 2026-10-16)
+
+Compra de segunda en persona: datos rápidos para tener una idea. Se abre siempre en "Rápida";
+"Completa" es la vista de siempre.
+
+- [x] `app/VistaRapida.js`: "Tomar foto" o escribir; el nombre se elige solo ("¿No es? Cambiar"
+      muestra otras opciones y las de tu historial); precio grande de usado (o nuevo si no hay
+      usados) con rango y tu venta anterior; "Te piden" y "Lo venderé en" los escribe Pablo
+      (botones de referencia: tu venta, usado, nuevo o estimado los llenan con un toque); muestra
+      "Ganas / Pierdes $X (Y %)", sin veredicto fijo; una línea antifraude de la categoría;
+      "Lo compré" registra la compra en el historial (crea el producto si no existe);
+      "Ver detalle" pasa a la vista completa con el mismo artículo.
+- [x] Cámara: elige la trasera principal (en Samsung "camera2 0"), enfoque continuo, botón
+      "Cambiar cámara" que recuerda la elegida. Antes salía borroso en el S23 FE.
+- [x] Foto: espera hasta 60 s (Lens a veces tarda más de 30) y muestra el paso
+      ("Identificando…", "Buscando precios…").
+
 ## Fase 6: opcional, solo si el uso lo justifica
 
 - [ ] Gemini como segunda opinión para identificar o para checklist específico (requiere prepago).
