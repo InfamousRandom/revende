@@ -348,6 +348,48 @@ function candidatosDeLens(d) {
   return nombres.slice(0, 5);
 }
 
+// Palabras que no ayudan a nombrar el artículo.
+const PALABRAS_RELLENO = new Set([
+  'de', 'del', 'la', 'el', 'los', 'las', 'con', 'y', 'en', 'para', 'por', 'sin', 'a', 'o', 'un', 'una',
+  'envio', 'gratis', 'oferta', 'nuevo', 'nueva', 'original', 'precio', 'mx', 'mexico', 'venta', 'tienda',
+]);
+const palabrasDe = (t) =>
+  normalizar(t).replace(/[^a-z0-9ñ ]+/g, ' ').split(' ').filter((p) => p.length > 1 && !PALABRAS_RELLENO.has(p));
+
+// Elige solo el nombre del artículo: el título cuyas palabras más se repiten entre todos los
+// resultados de Lens, sin las palabras que casi nadie más usa. Así "Audífonos Anker P30 azules",
+// "Anker P30 azules BT" y "Soundcore P30 azul envío gratis" dan "Audífonos Anker P30 azules".
+function nombreSugerido(d) {
+  const titulos = [...(d.related_content || []).map((r) => r.query), ...(d.visual_matches || []).slice(0, 20).map((m) => m.title)]
+    .map((t) => limpiarTitulo(String(t || '')))
+    .filter((t) => t.length >= 3 && t.length <= 120);
+  if (!titulos.length) return null;
+
+  // En cuántos títulos aparece cada palabra.
+  const veces = new Map();
+  for (const t of titulos) for (const p of new Set(palabrasDe(t))) veces.set(p, (veces.get(p) || 0) + 1);
+  const minimo = Math.max(2, Math.ceil(titulos.length * 0.15));
+  const repetida = (p) => (veces.get(p) || 0) >= minimo;
+
+  const puntaje = (t) => [...new Set(palabrasDe(t))].reduce((s, p) => s + (repetida(p) ? veces.get(p) : -1), 0);
+  const mejor = titulos.reduce((a, b) => {
+    const d = puntaje(b) - puntaje(a);
+    return d > 0 || (d === 0 && b.length < a.length) ? b : a;
+  });
+
+  // Quitar del mejor título lo que casi nadie más usa. Las palabras de relleno ("de", "con")
+  // se quedan solo entre dos palabras que se quedan.
+  const piezas = mejor.split(/\s+/);
+  const util = piezas.map((w) => {
+    const ps = palabrasDe(w);
+    return ps.length ? ps.every(repetida) : null; // null = relleno
+  });
+  const limpio = piezas
+    .filter((w, i) => util[i] === true || (util[i] === null && util[i - 1] === true && util[i + 1] === true))
+    .join(' ');
+  return palabrasDe(limpio).length >= 2 ? limpio : mejor;
+}
+
 function preciosDeLens(d) {
   return (d.visual_matches || [])
     .filter((m) => m.price?.extracted_value > 0 && m.link && m.source && /mxn|\$/i.test(m.price.value || ''))
@@ -403,7 +445,10 @@ async function identificar(request, env) {
       };
       return json({ ok: false, vacio: true, error: 'No se reconoció el artículo. Prueba con la etiqueta, la caja o el número de modelo.', detalle }, 404);
     }
-    return json({ ok: true, candidatos, precios: preciosDeLens(datos) });
+    const sugerido = nombreSugerido(datos) || candidatos[0];
+    // Las demás opciones, por si el nombre elegido no es el correcto.
+    const otros = candidatos.filter((c) => normalizar(c) !== normalizar(sugerido)).slice(0, 4);
+    return json({ ok: true, sugerido, candidatos: otros, precios: preciosDeLens(datos) });
   } finally {
     await foto.borrar();
   }

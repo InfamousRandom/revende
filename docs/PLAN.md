@@ -164,6 +164,10 @@ catálogo de la Fase 3.
 - [x] Consejo visible: fotografiar etiqueta, caja o número de modelo.
 - [x] **(Pablo)** Probar en producción con una foto real (confirmado por Pablo el 2026-10-16; en local Lens no puede ver la foto porque
       `localhost` no es público).
+- [x] Nombre elegido solo (pedido de Pablo, 2026-10-16): el Worker devuelve `sugerido`, el título
+      cuyas palabras más se repiten entre los resultados de Lens, sin las que casi nadie usa ("envío
+      gratis", tiendas). Se pone en el buscador; las demás opciones y los precios de la foto quedan
+      plegados. No busca precios solo (1 búsqueda por foto, no 2). Foto reducida a 800 px.
 - [ ] Al mostrar candidatos de la foto, incluir también productos de mi catálogo que coincidan.
 - [ ] Al confirmar un candidato, mostrar precios y mi historial de ese producto.
 - Notas: candidatos salen de `related_content` de Lens (nombres limpios) y de títulos de

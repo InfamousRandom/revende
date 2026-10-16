@@ -142,6 +142,7 @@ export default function Inicio() {
     if (q.length < 2 || precios.fase === 'cargando') return;
     setPrecios({ fase: 'cargando', consulta: q });
     setRefs({ fase: 'inactivo' });
+    if (ident.fase === 'ok') cerrarIdent(); // ya se usó el nombre de la foto
     let precioNuevo = null;
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), ESPERA_MAXIMA_MS);
@@ -218,7 +219,8 @@ export default function Inicio() {
       });
       const datos = await r.json().catch(() => null);
       if (r.ok && datos?.ok) {
-        setIdent({ fase: 'ok', vista, candidatos: datos.candidatos, precios: datos.precios || [] });
+        setIdent({ fase: 'ok', vista, sugerido: datos.sugerido, candidatos: datos.candidatos || [], precios: datos.precios || [] });
+        if (datos.sugerido) setBusqueda(datos.sugerido); // el nombre con más coincidencias, listo para buscar
       } else {
         setIdent({ fase: 'error', vista, error: datos?.error || 'No se pudo identificar la foto. Intenta de nuevo.' });
       }

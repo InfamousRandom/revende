@@ -1,9 +1,9 @@
 'use client';
 
 const pesos = new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
-const LADO_MAXIMO = 1024;
+const LADO_MAXIMO = 800; // suficiente para Lens y sube más rápido
 
-// Reduce la foto en el celular (~1024 px, JPEG) antes de mandarla: sube rápido y gasta menos datos.
+// Reduce la foto en el celular (~800 px, JPEG) antes de mandarla: sube rápido y gasta menos datos.
 export async function reducirImagen(archivo) {
   let imagen;
   try {
@@ -18,11 +18,12 @@ export async function reducirImagen(archivo) {
   lienzo.getContext('2d').drawImage(imagen, 0, 0, lienzo.width, lienzo.height);
   imagen.close?.();
   return new Promise((resolver, rechazar) =>
-    lienzo.toBlob((blob) => (blob ? resolver(blob) : rechazar(new Error('No se pudo leer la foto'))), 'image/jpeg', 0.8),
+    lienzo.toBlob((blob) => (blob ? resolver(blob) : rechazar(new Error('No se pudo leer la foto'))), 'image/jpeg', 0.75),
   );
 }
 
-// Tarjeta de identificación. `estado`: { fase: 'inactivo' | 'cargando' | 'ok' | 'error', vista, candidatos, precios, error }
+// Tarjeta de identificación. `estado`: { fase: 'inactivo' | 'cargando' | 'ok' | 'error', vista, sugerido, candidatos, precios, error }
+// El nombre con más coincidencias ya se puso en el buscador; las otras opciones quedan plegadas.
 export default function Identificacion({ estado, onElegir, onCerrar }) {
   if (estado.fase === 'inactivo') return null;
 
@@ -32,8 +33,13 @@ export default function Identificacion({ estado, onElegir, onCerrar }) {
         {estado.vista && <img className="ident-foto" src={estado.vista} alt="Tu foto" />}
         <div className="ident-texto">
           {estado.fase === 'cargando' && <p>Identificando el artículo…</p>}
-          {estado.fase === 'ok' && <p className="precios-producto">¿Cuál es?</p>}
-          {estado.fase === 'ok' && <p className="precios-pie">Toca el nombre correcto; luego puedes ajustarlo (capacidad, color) antes de buscar.</p>}
+          {estado.fase === 'ok' && (
+            <>
+              <p className="precios-pie">Lo identifiqué como</p>
+              <p className="precios-producto">{estado.sugerido}</p>
+              <p className="precios-pie">Ya está en el buscador. Ajústalo si hace falta (capacidad, color) y toca “Buscar precios”.</p>
+            </>
+          )}
           {estado.fase === 'error' && <p role="alert">{estado.error}</p>}
         </div>
         <button type="button" className="ident-cerrar" onClick={onCerrar} aria-label="Cerrar">
@@ -45,16 +51,21 @@ export default function Identificacion({ estado, onElegir, onCerrar }) {
 
       {estado.fase === 'ok' && (
         <>
-          <div className="candidatos">
-            {estado.candidatos.map((c) => (
-              <button key={c} type="button" className="candidato" onClick={() => onElegir(c)}>
-                {c}
-              </button>
-            ))}
-          </div>
+          {estado.candidatos.length > 0 && (
+            <details className="mas-detalles">
+              <summary>¿No es? Ver otras opciones ({estado.candidatos.length})</summary>
+              <div className="candidatos">
+                {estado.candidatos.map((c) => (
+                  <button key={c} type="button" className="candidato" onClick={() => onElegir(c)}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </details>
+          )}
           {estado.precios.length > 0 && (
-            <>
-              <h3 className="ident-subtitulo">Precios vistos junto a la foto</h3>
+            <details className="mas-detalles">
+              <summary>Precios vistos junto a la foto ({estado.precios.length})</summary>
               <ul className="ofertas">
                 {estado.precios.map((o, i) => (
                   <li key={`${o.tienda}-${i}`} className="oferta">
@@ -69,7 +80,7 @@ export default function Identificacion({ estado, onElegir, onCerrar }) {
                   </li>
                 ))}
               </ul>
-            </>
+            </details>
           )}
         </>
       )}
