@@ -29,6 +29,29 @@ Plan por fases y tareas: `docs/PLAN.md`. Léelo antes de empezar cualquier tarea
   `npx wrangler dev`. No escribir datos de prueba en producción.
 - Repo: github.com/InfamousRandom/revende (rama `main`).
 
+## Revende 2.0 (app nativa, en desarrollo desde 2026-10-19)
+
+Plan: `docs/PLAN-v2.md`. Análisis de referencia: `docs/analisis-sellraze.md`. La web actual sigue en
+producción hasta que la versión web de 2.0 la reemplace.
+
+- App en `movil/`: Expo SDK 58 + Expo Router + TypeScript, solo Android (APK con EAS, perfil `apk`
+  en `movil/eas.json`). Rutas en `movil/src/app/`; diseño en `movil/src/constants/theme.ts`.
+  Antes de tocar APIs de Expo, leer `movil/AGENTS.md` (las APIs cambian entre versiones).
+- Interfaz: usar la skill `ui-ux-pro-max` para decisiones de diseño. Estilo inspirado en SellRaze
+  (azul marino, azul eléctrico, verde para dinero, amarillo-lima para destacar), claro y oscuro.
+- Datos de ejemplo en `movil/src/datos/ejemplo.ts`: inventados, solo en desarrollo (`__DEV__`) y
+  siempre con el aviso "Datos de ejemplo". Nunca en una compilación de producción.
+- Acceso de la app: código del Secret `REVENDE_DISPOSITIVO` en el encabezado
+  `x-revende-dispositivo` (`verificarAcceso` en `worker/util.js`); bloqueo de 15 min tras 5 fallos.
+  La app lo guarda cifrado con `expo-secure-store`. Nunca pedirle a Pablo que pegue el código en el
+  chat; él lo pone en `.dev.vars`.
+- Comandos de la app (desde `movil/`): `npx expo start --web` (vista previa), `npx tsc --noEmit` y
+  `npx eslint src` antes de dar algo por terminado. `movil/.env.local` (ignorado) puede apuntar
+  `EXPO_PUBLIC_API_URL` al Worker local (`http://127.0.0.1:8787`); el Worker solo acepta CORS de
+  `http://localhost:8081` para estas pruebas.
+- `wrangler dev` en Windows: si el almacenamiento local (KV/D1) da "internal error", revisar que no
+  queden procesos `wrangler dev`/`workerd` viejos corriendo.
+
 ## Stack
 
 - Next.js 14.2.35 (App Router), exportación estática (`output: 'export'` en `next.config.mjs`),
@@ -70,7 +93,11 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
   URL pública: el Worker la guarda unos minutos en un Durable Object (`FotoTemporal`) y la sirve
   en una ruta temporal (`/api/img/:id.jpg`).
 - **Gemini con búsqueda:** pausado. Requiere $5 USD de prepago. Opción futura, no principal.
-- **API de Mercado Libre:** no usar. La búsqueda pública devuelve 403 desde 2024.
+- **API de Mercado Libre:** solo el catálogo de productos (probado el 2026-10-19 con la app propia
+  de Pablo y token `client_credentials`): nombre oficial, marca, modelo, año de lanzamiento y a veces
+  precios de nuevo. La búsqueda de publicaciones (`/sites/MLM/search`) responde 403 incluso con token
+  de app o de usuario, así que no sirve para precios de usados. Claves: `ML_CLIENT_ID` y
+  `ML_CLIENT_SECRET` (en `.dev.vars` en local). Detalle en `docs/PLAN-v2.md`.
 - **Facebook Marketplace:** nada automatizado (viola términos). Precios de usado por captura
   manual rápida dentro de la app.
 - **Datos del usuario (historial de ventas, capturas de usado):** en Cloudflare D1 desde el inicio

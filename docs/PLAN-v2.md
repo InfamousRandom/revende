@@ -18,7 +18,13 @@ reemplace (Fase V9).
 | Repo y backend | Mismo repo y mismo Worker de Cloudflare (D1, KV, Durable Object). Se conserva el historial. |
 | Acceso | Emparejar el celular una vez con un código; el Worker solo responde a quien lo traiga. |
 | Estilo | Como SellRaze: fondo azul marino oscuro, azul eléctrico para la acción principal, verde para dinero, etiqueta amarilla-lima para destacar. Modo claro y oscuro. Logo, nombre y tonos propios. |
-| SerpApi | Plan gratis (250 búsquedas al mes). Se mide el uso y luego se decide. |
+| SerpApi | Plan gratis (250 búsquedas al mes). Se mide el uso y luego se decide. Si no alcanza: Starter ($25/mes) o SearchApi ($40/mes, confirmar que incluya Lens). |
+| Búsqueda | Por foto y por texto (nombre y/o modelo). Las dos terminan en el mismo resultado. |
+| Identificar | De lo más barato a lo más caro: código de barras → etiqueta leída en el teléfono → Google Lens → IA con visión (respaldo). Texto va directo al catálogo. |
+| Mercado Libre | Probado el 2026-10-19 con una app propia. Sí: catálogo de productos con token de app (nombre oficial, marca, modelo, color, año de lanzamiento y a veces precios de nuevo). No: la búsqueda de publicaciones (`/sites/MLM/search`) responde 403 incluso con permiso de usuario, así que no da precios de usados. |
+| Precio de usado | Tu historial de ventas, capturas manuales de Marketplace, usados de Google Shopping y precios de Lens. Es el número que decide la compra; el precio nuevo es el techo. |
+| Año de lanzamiento | Del catálogo de Mercado Libre (`RELEASE_YEAR`); si no viene, Wikidata. Se muestra discreto junto a la marca. |
+| Calculadora | Precio máximo = precio de venta − ganancia buscada. Sin gastos. |
 | Cartas | Solo Pokémon. |
 | Inventario | Estados: En inventario, Publicado, Vendido, Descartado. |
 | Fuera | Marketplace propio, Racks, Chat, publicar en marketplaces (incluido eBay), retiro automático, peso y medidas, IA de moda. |
@@ -39,18 +45,25 @@ pantalla) → Guardado en inventario.
 
 ## Fase V1: base de la app
 
-- [ ] Proyecto Expo en `movil/` (TypeScript, Expo Router), compatible con web desde el inicio.
-- [ ] Sistema de diseño: colores como variables para claro y oscuro, tipografía, espacios en múltiplos
-      de 8, botones en píldora, tarjetas, hojas que suben desde abajo, íconos de un solo set (Lucide).
-- [ ] Barra inferior con las 5 secciones y pantallas vacías con su mensaje e invitación.
-- [ ] Logo e ícono propios de Revende.
+- [x] Proyecto Expo en `movil/` (Expo SDK 58, TypeScript, Expo Router), compatible con web.
+- [x] Sistema de diseño (`movil/src/constants/theme.ts`): colores claro y oscuro con contraste
+      revisado, Plus Jakarta Sans, espacios en múltiplos de 4/8, botones en píldora, íconos Lucide.
+- [x] Barra inferior con las 5 secciones y pantallas vacías con su mensaje e invitación.
+- [x] Pantallas con datos de ejemplo (solo en desarrollo, con aviso visible): inventario, ficha,
+      historial, estadísticas, búsqueda por texto y escaneo simulado.
+- [x] Logo e ícono propios de Revende (ícono, ícono adaptable de Android, splash y favicon).
 - [ ] Worker: emparejamiento por código.
-  - [ ] **(Pablo)** Guardar el código en Cloudflare como Secret `REVENDE_DISPOSITIVO`.
-  - [ ] Las rutas aceptan el código en un encabezado o, mientras exista la web actual, el mismo origen.
-  - [ ] La app pide el código la primera vez y lo guarda cifrado (`expo-secure-store`).
+  - [x] **(Pablo)** Guardar el código en Cloudflare como Secret `REVENDE_DISPOSITIVO`.
+  - [x] Las rutas aceptan el código en el encabezado `x-revende-dispositivo` o, mientras exista la
+        web actual, el mismo origen (`verificarAcceso` en `worker/util.js`). `GET /api/emparejar`.
+  - [x] Bloqueo de 15 minutos tras 5 códigos incorrectos seguidos desde la misma IP.
+  - [x] La app pide el código la primera vez y lo guarda cifrado (`expo-secure-store`).
+  - [ ] Publicar el Worker (preguntar antes del push a `main`).
+  - [ ] Si el Worker responde 401 en uso normal, volver a la pantalla de emparejar.
 - [ ] Generar el APK.
-  - [ ] **(Pablo)** Crear cuenta gratis en expo.dev (compila el APK en la nube).
-  - [ ] Perfil de compilación que entrega un APK instalable.
+  - [x] **(Pablo)** Crear cuenta gratis en expo.dev (compila el APK en la nube).
+  - [x] Perfil de compilación `apk` en `movil/eas.json`.
+  - [ ] **(Pablo)** `npx eas-cli@latest login` y luego `npx eas-cli@latest build -p android --profile apk`.
 
 Terminado cuando: el APK se instala, se empareja con el código y muestra las 5 secciones en claro y oscuro.
 
@@ -74,12 +87,29 @@ Terminado cuando: registrar una compra con foto toma menos de 30 segundos y el h
       esquinas guía, varias fotos por artículo, ajustes de brillo y cuadrícula.
 - [ ] Leer el texto de la etiqueta en el teléfono (ML Kit) para mejorar la búsqueda sin gastar cuota.
 - [ ] Código de barras desde la misma cámara.
+- [ ] Código de barras → nombre con UPCitemdb (gratis, 100 al día) antes de gastar una búsqueda.
+- [ ] Orden para identificar una foto: código de barras → etiqueta → Lens → IA con visión.
+- [ ] Búsqueda por texto (nombre y/o modelo) en la sección Buscar, y "¿No es? Corrige el nombre" en
+      el resultado. Solo busca al confirmar, nunca mientras se escribe.
+- [ ] Catálogo de Mercado Libre en el Worker:
+  - [x] **(Pablo)** Crear la app en developers.mercadolibre.com.mx (hecho el 2026-10-19).
+  - [ ] **(Pablo)** Guardar `ML_CLIENT_ID` y `ML_CLIENT_SECRET` en Cloudflare como Secrets
+        (en local ya están en `.dev.vars`).
+  - [ ] Token de app con `client_credentials` (dura 6 h), guardado en KV y renovado solo.
+  - [ ] `GET /api/catalogo?q=` → productos con nombre oficial, marca, modelo, color y año
+        (`/products/search` y `/products/{id}`), en cache KV 24 h.
+  - [ ] Precios de nuevo del catálogo (`/products/{id}/items`) cuando haya publicaciones, con link
+        y marcados como fuente "Mercado Libre".
+  - [ ] Filtrar accesorios: el catálogo los mezcla (fundas, cargadores) con el producto.
+- [ ] Año de lanzamiento: catálogo de Mercado Libre; si no viene, Wikidata.
 - [ ] Pantalla de procesando con avance por pasos.
-- [ ] Resultado: sugerencia con nombre y marca, "¿No es? Corregir", precios nuevos y usados con tienda
-      y link (`/api/identificar` + `/api/precios`), calculadora de precio máximo y botón "Lo compré".
+- [ ] Resultado: sugerencia con nombre, marca y año discreto, "¿No es? Corrige el nombre", precios
+      nuevos y usados con tienda y link (`/api/identificar` + `/api/precios` + `/api/catalogo`),
+      calculadora de precio máximo (sin gastos) y botón "Lo compré".
 - [ ] Capturas manuales de precio de usado, como hoy.
 
-Terminado cuando: una foto identifica el artículo, muestra precios con fuente y lo guarda en inventario.
+Terminado cuando: una foto o un texto identifica el artículo, muestra precios con fuente y lo guarda
+en inventario; una foto con código o etiqueta legible gasta como máximo 1 búsqueda de SerpApi.
 
 ## Fase V4: editor de fotos
 
