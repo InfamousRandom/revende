@@ -2,6 +2,7 @@
 // Sin clave (decisión de Pablo, 2026-10-16): como precios, solo acepta llamadas desde la app.
 import { json, normalizar, verificarAcceso } from './util.js';
 import { escribirCsv, leerCsv } from './csv.js';
+import { borrarFoto, borrarFotosDeOperacion, hacerPortada, listarFotos, servirFoto, subirFoto } from './fotos.js';
 
 const CONDICIONES = ['sellado', 'como_nuevo', 'usado_bueno', 'con_detalles'];
 const CANALES = ['en_persona', 'marketplace', 'otro'];
@@ -9,7 +10,7 @@ const MAX_TEXTO = 120;
 const MAX_NOTAS = 1000;
 const MAX_PESOS = 10_000_000;
 
-export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas|exportar|importar)(\/|$)/.test(ruta);
+export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas|exportar|importar|fotos)(\/|$)/.test(ruta);
 
 const FUENTES = ['marketplace', 'ml_usado', 'otro'];
 
@@ -189,7 +190,7 @@ async function crearProducto(request, env) {
 const CAMPOS_OPERACION = [
   'producto_id', 'condicion', 'precio_compra', 'fecha_compra', 'lugar_compra', 'precio_publicado',
   'fecha_publicado', 'precio_venta', 'fecha_venta', 'canal', 'envio_mxn', 'otros_gastos_mxn',
-  'precio_nuevo_ref', 'notas',
+  'precio_nuevo_ref', 'notas', 'fecha_descartado',
 ];
 
 // Valida y limpia los campos presentes en `c` (los ausentes no se tocan).
@@ -217,6 +218,7 @@ function limpiarOperacion(c) {
     ['fecha_compra', 'Fecha de compra'],
     ['fecha_publicado', 'Fecha de publicación'],
     ['fecha_venta', 'Fecha de venta'],
+    ['fecha_descartado', 'Fecha de descarte'],
   ]) {
     if (hay(k)) o[k] = fecha(c[k], nombre);
   }
@@ -238,13 +240,21 @@ function completarOperacion(o) {
   if (o.precio_venta == null) o.fecha_venta = null;
   if (o.precio_compra == null && o.precio_venta == null) fallar('Escribe el precio de compra o el de venta');
   if (o.fecha_compra && o.fecha_venta && o.fecha_venta < o.fecha_compra) fallar('La venta no puede ser antes de la compra');
+  if (o.fecha_venta && o.fecha_descartado) fallar('Un artículo vendido no puede estar descartado');
   return o;
 }
 
 // Columnas calculadas que regresan las consultas de operaciones.
 const SELECT_OPERACION = `
-  SELECT o.*, p.nombre AS producto, p.categoria,
+  SELECT o.*, p.nombre AS producto, p.categoria, p.marca, p.modelo,
     CASE WHEN o.fecha_venta IS NULL THEN 'inventario' ELSE 'vendido' END AS estado,
+    -- Estado de Revende 2.0 (la web actual sigue usando estado).
+    CASE WHEN o.fecha_venta IS NOT NULL THEN 'vendido'
+         WHEN o.fecha_descartado IS NOT NULL THEN 'descartado'
+         WHEN o.fecha_publicado IS NOT NULL THEN 'publicado'
+         ELSE 'inventario' END AS situacion,
+    (SELECT f.id FROM fotos f WHERE f.operacion_id = o.id ORDER BY f.orden, f.id LIMIT 1) AS portada_id,
+    (SELECT count(*) FROM fotos f WHERE f.operacion_id = o.id) AS fotos,
     CAST(julianday(coalesce(o.fecha_venta, ?)) - julianday(o.fecha_compra) AS INTEGER) AS dias,
     CASE WHEN o.precio_venta IS NOT NULL AND o.precio_compra IS NOT NULL
       THEN o.precio_venta - o.precio_compra - o.envio_mxn - o.otros_gastos_mxn END AS ganancia
@@ -355,6 +365,7 @@ async function listarOperaciones(env, url) {
 }
 
 async function borrarOperacion(env, id) {
+  await borrarFotosDeOperacion(env, id);
   const { meta } = await env.DB.prepare('DELETE FROM operaciones WHERE id = ?').bind(id).run();
   if (!meta.changes) return json({ ok: false, error: 'Esa operación no existe' }, 404);
   return json({ ok: true, borrada: id });
@@ -491,6 +502,7 @@ const COLUMNAS_CSV = [
   'producto', 'categoria', 'marca', 'modelo', 'variante', 'codigo_barras', 'condicion',
   'precio_compra', 'fecha_compra', 'lugar_compra', 'precio_publicado', 'fecha_publicado',
   'precio_venta', 'fecha_venta', 'canal', 'envio_mxn', 'otros_gastos_mxn', 'precio_nuevo_ref', 'notas',
+  'fecha_descartado',
 ];
 const MAX_CSV_BYTES = 1024 * 1024;
 const MAX_FILAS_CSV = 2000;
@@ -532,6 +544,7 @@ const ALIAS_CSV = {
   otros_gastos_mxn: ['otros gastos mxn', 'otros gastos', 'otros'],
   precio_nuevo_ref: ['precio nuevo ref', 'precio nuevo'],
   notas: ['notas', 'nota'],
+  fecha_descartado: ['fecha descartado', 'fecha de descarte', 'descartado'],
 };
 const nombreColumna = (t) => normalizar(t).replace(/_/g, ' ').replace(/\s+/g, ' ');
 
@@ -698,6 +711,20 @@ export async function historial(request, env, url) {
       if (metodo === 'PATCH') return await actualizarOperacion(request, env, id);
       if (metodo === 'DELETE') return await borrarOperacion(env, id);
     }
+    const fotosDe = /^\/api\/operaciones\/(\d+)\/fotos$/.exec(ruta);
+    if (fotosDe) {
+      const id = Number(fotosDe[1]);
+      if (metodo === 'GET') return await listarFotos(env, id);
+      if (metodo === 'POST') return await subirFoto(request, env, id);
+    }
+    const unaFoto = /^\/api\/fotos\/(\d+)$/.exec(ruta);
+    if (unaFoto) {
+      const id = Number(unaFoto[1]);
+      if (metodo === 'GET') return await servirFoto(env, id);
+      if (metodo === 'DELETE') return await borrarFoto(env, id);
+    }
+    const portada = /^\/api\/fotos\/(\d+)\/portada$/.exec(ruta);
+    if (portada && metodo === 'POST') return await hacerPortada(env, Number(portada[1]));
     return json({ ok: false, error: 'Ruta o método no válido' }, 404);
   } catch (e) {
     if (e instanceof ErrorDatos) return json({ ok: false, error: e.message }, 400);

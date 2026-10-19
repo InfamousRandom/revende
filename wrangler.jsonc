@@ -20,6 +20,10 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Fotos de los artículos del inventario (Revende 2.0, Fase V2).
+  "r2_buckets": [
+    { "binding": "FOTOS_ARTICULOS", "bucket_name": "revende-fotos" }
+  ],
   // Fotos temporales para Google Lens (lectura consistente desde cualquier región).
   "durable_objects": {
     "bindings": [{ "name": "FOTOS", "class_name": "FotoTemporal" }]
