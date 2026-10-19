@@ -1,6 +1,7 @@
 // Worker de Revende: sirve la app (archivos de ./out) y las rutas /api.
 import { DurableObject } from 'cloudflare:workers';
 import { ENCABEZADO_DISPOSITIVO, json, normalizar, verificarAcceso } from './util.js';
+import { catalogo, codigoDeBarras } from './catalogo.js';
 import { historial, esRutaHistorial, productosDelCatalogo } from './historial.js';
 const MODELO_DEFECTO = 'gemini-3-flash-preview';
 
@@ -530,6 +531,7 @@ async function manejar(request, env, url) {
       serpapi: Boolean(env.SERPAPI_KEY),
       cache: Boolean(env.CACHE),
       dispositivo: Boolean(env.REVENDE_DISPOSITIVO),
+      mercadolibre: Boolean(env.ML_CLIENT_ID && env.ML_CLIENT_SECRET),
     });
   }
 
@@ -546,6 +548,18 @@ async function manejar(request, env, url) {
       return await historial(request, env, url);
     } catch (e) {
       return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+    }
+  }
+
+  // Catálogo de Mercado Libre y código de barras (no gastan SerpApi).
+  if (url.pathname === '/api/catalogo' || url.pathname === '/api/codigo') {
+    if (request.method !== 'GET') return json({ ok: false, error: 'Usa GET' }, 405);
+    const sinPermiso = await verificarAcceso(request, env);
+    if (sinPermiso) return sinPermiso;
+    try {
+      return url.pathname === '/api/catalogo' ? await catalogo(env, url) : await codigoDeBarras(env, url);
+    } catch (e) {
+      return json({ ok: false, error: 'No se pudo consultar el catálogo. Intenta de nuevo.', detalle: String(e).slice(0, 200) }, 502);
     }
   }
 
