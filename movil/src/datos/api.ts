@@ -119,3 +119,87 @@ export function borrarFoto(fotoId: number) {
 export function fuenteFoto(fotoId: number, codigo: string | null) {
   return { uri: `${API_URL}/api/fotos/${fotoId}`, headers: codigo ? { [ENCABEZADO_DISPOSITIVO]: codigo } : undefined };
 }
+
+// ---------- Búsqueda e identificación ----------
+
+/** Oferta tal como la devuelve /api/precios. */
+export type OfertaApi = {
+  titulo: string;
+  tienda: string;
+  precio: number;
+  link: string;
+  usado: boolean;
+  condicion: string;
+  miniatura: string | null;
+  aviso?: string;
+};
+type Resumen = { rango: { min: number; mediana: number; max: number } | null; ofertas: OfertaApi[] };
+export type PreciosApi = { consulta: string; producto: string; imagen: string | null; nuevos: Resumen; usados: Resumen; total: number; cache: boolean };
+
+/** Google Shopping vía SerpApi: gasta 1 búsqueda si no está en la memoria de 24 h. */
+export function buscarPrecios(consulta: string) {
+  return llamar<PreciosApi>('/api/precios', conJson('POST', { consulta }));
+}
+
+export type ProductoCatalogo = {
+  id: string;
+  nombre: string;
+  marca: string | null;
+  modelo: string | null;
+  color: string | null;
+  lanzamiento: number | null;
+  imagen: string | null;
+  link: string;
+  completo: boolean;
+};
+export type CatalogoApi = {
+  productos: ProductoCatalogo[];
+  precios: { fuente: string; link: string; total: number; precios: { precio: number; condicion: string; usado: boolean }[] } | null;
+};
+
+/** Catálogo de Mercado Libre (gratis). */
+export function buscarCatalogo(q: string) {
+  return llamar<CatalogoApi>(`/api/catalogo?q=${encodeURIComponent(q)}`);
+}
+
+export function buscarCodigo(codigo: string) {
+  return llamar<{ nombre: string; marca: string | null; fuente: string }>(`/api/codigo?c=${encodeURIComponent(codigo)}`);
+}
+
+export type IdentificacionApi = {
+  sugerido: string;
+  candidatos: string[];
+  catalogo: { id: number; nombre: string }[];
+  precios: { titulo: string; tienda: string; precio: number; link: string }[];
+};
+
+/** Google Lens vía SerpApi (1 búsqueda). La foto se manda reducida (JPEG). */
+export async function identificarFoto(uri: string) {
+  const archivo = await (await fetch(uri)).blob();
+  return llamar<IdentificacionApi>('/api/identificar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/jpeg' },
+    body: archivo,
+  });
+}
+
+export type ReferenciasApi = {
+  producto: { id: number; nombre: string } | null;
+  resumen?: {
+    ventas: { n: number; mediana: number; min: number; max: number } | null;
+    capturas: { n: number; mediana: number; min: number; max: number } | null;
+    todo: { n: number; mediana: number; min: number; max: number } | null;
+    dias_mediana: number | null;
+  };
+};
+
+/** Lo que ya vendiste de este artículo (tu historial en D1, gratis). */
+export function buscarReferencias(q: string, precioNuevo?: number) {
+  const extra = precioNuevo ? `&precio_nuevo=${precioNuevo}` : '';
+  return llamar<ReferenciasApi>(`/api/referencias?q=${encodeURIComponent(q)}${extra}`);
+}
+
+/** Búsquedas de SerpApi que quedan este mes. */
+export function cuota() {
+  return llamar<{ restantes: number; mensuales: number }>('/api/cuota');
+}

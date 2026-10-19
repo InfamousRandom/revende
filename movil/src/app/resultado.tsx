@@ -1,62 +1,63 @@
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calculator, ExternalLink, X } from 'lucide-react-native';
-import { useEffect, useState } from 'react';
+import { Calculator, ExternalLink, History, Search, X } from 'lucide-react-native';
+import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CampoBusqueda } from '@/components/campo-busqueda';
+import { PantallaVacia } from '@/components/pantalla-vacia';
 import { ThemedText } from '@/components/themed-text';
-import { AvisoEjemplo, Boton, Destacado, Miniatura, Tarjeta } from '@/components/ui';
+import { AvisoEjemplo, Boton, Destacado, Miniatura, Pildora, Tarjeta } from '@/components/ui';
 import { Fonts, IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
-import { RESULTADO_EJEMPLO } from '@/datos/ejemplo';
+import type { OfertaApi } from '@/datos/api';
+import { useArticulos } from '@/datos/articulos';
+import { PASOS, useBusqueda, type Entrada, type Resultado as DatosResultado } from '@/datos/busqueda';
 import { pesos } from '@/datos/formato';
-import type { Oferta } from '@/datos/tipos';
 import { useTheme } from '@/hooks/use-theme';
 
-const PASOS_FOTO = ['Revisando la foto', 'Identificando el artículo', 'Buscando precios', 'Listo'];
-const PASOS_TEXTO = ['Buscando el artículo', 'Buscando precios', 'Listo'];
+const VISIBLES = 6;
 
 /**
- * Resultado de una búsqueda: por foto (desde el ＋) o por texto (`consulta`, nombre y/o modelo).
- * Por ahora siempre muestra el resultado de ejemplo.
+ * Resultado de una búsqueda por foto (`foto`), código de barras (`codigo`) o texto (`consulta`).
+ * Nunca muestra un precio sin su fuente.
  */
 export default function Resultado() {
-  const { consulta } = useLocalSearchParams<{ consulta?: string }>();
-  // La clave reinicia el avance cada vez que cambia la búsqueda.
-  return <Flujo key={consulta ?? 'foto'} consulta={consulta} />;
+  const p = useLocalSearchParams<{ consulta?: string; codigo?: string; foto?: string }>();
+  const entrada: Entrada = p.consulta
+    ? { tipo: 'texto', consulta: p.consulta }
+    : p.codigo
+      ? { tipo: 'codigo', codigo: p.codigo }
+      : { tipo: 'foto', uri: p.foto ?? '' };
+  const clave = p.consulta ?? p.codigo ?? p.foto ?? '';
+  return <Flujo key={`${entrada.tipo}:${clave}`} entrada={entrada} />;
 }
 
-function Flujo({ consulta }: { consulta?: string }) {
-  const pasos = consulta ? PASOS_TEXTO : PASOS_FOTO;
-  const [paso, setPaso] = useState(0);
-  const listo = paso >= pasos.length - 1;
+function Flujo({ entrada }: { entrada: Entrada }) {
+  const { sonDeEjemplo } = useArticulos();
+  const { paso, resultado, error } = useBusqueda(entrada, sonDeEjemplo);
 
-  useEffect(() => {
-    if (listo) return;
-    const t = setTimeout(() => setPaso((p) => p + 1), 700);
-    return () => clearTimeout(t);
-  }, [paso, listo]);
-
-  return listo ? <VistaResultado consulta={consulta} /> : <Procesando pasos={pasos} paso={paso} consulta={consulta} />;
+  if (error) return <Falla error={error} entrada={entrada} />;
+  if (!resultado) return <Procesando entrada={entrada} paso={paso} />;
+  return <VistaResultado r={resultado} entrada={entrada} />;
 }
 
-function Procesando({ pasos, paso, consulta }: { pasos: string[]; paso: number; consulta?: string }) {
+function Procesando({ entrada, paso }: { entrada: Entrada; paso: number }) {
   const theme = useTheme();
+  const pasos = PASOS[entrada.tipo];
 
   return (
     <SafeAreaView style={[styles.contenedor, styles.centrado, { backgroundColor: theme.fondo }]}>
-      {consulta ? (
-        <ThemedText type="subtitulo" style={{ textAlign: 'center' }}>
-          «{consulta}»
-        </ThemedText>
+      {entrada.tipo === 'foto' && entrada.uri ? (
+        <Image source={{ uri: entrada.uri }} style={styles.procesandoFoto} contentFit="cover" />
       ) : (
-        <View style={styles.procesandoFoto}>
-          <Miniatura categoria={RESULTADO_EJEMPLO.categoria} />
-        </View>
+        <ThemedText type="subtitulo" style={{ textAlign: 'center' }}>
+          «{entrada.tipo === 'texto' ? entrada.consulta : entrada.tipo === 'codigo' ? entrada.codigo : ''}»
+        </ThemedText>
       )}
       <View style={styles.pasos} accessibilityRole="progressbar" aria-valuenow={paso + 1} aria-valuemax={pasos.length}>
-        {pasos.map((p, i) => (
-          <View key={p} style={[styles.segmento, { backgroundColor: i <= paso ? theme.primario : theme.superficieAlta }]} />
+        {pasos.map((nombre, i) => (
+          <View key={nombre} style={[styles.segmento, { backgroundColor: i <= paso ? theme.primario : theme.superficieAlta }]} />
         ))}
       </View>
       <ThemedText type="cuerpoFuerte" themeColor="textoSecundario" aria-live="polite">
@@ -66,121 +67,237 @@ function Procesando({ pasos, paso, consulta }: { pasos: string[]; paso: number; 
   );
 }
 
-function VistaResultado({ consulta }: { consulta?: string }) {
+function Falla({ error, entrada }: { error: string; entrada: Entrada }) {
   const theme = useTheme();
-  const r = RESULTADO_EJEMPLO;
-  const [venta, setVenta] = useState(String(r.usado.mediana));
-  const [ganancia, setGanancia] = useState('800');
+  return (
+    <SafeAreaView style={[styles.contenedor, { backgroundColor: theme.fondo }]}>
+      <BarraSuperior />
+      <PantallaVacia Icono={Search} titulo="No encontramos el artículo" texto={error} />
+      <View style={styles.falla}>
+        <CampoBusqueda
+          etiqueta="Escribir el nombre o modelo"
+          placeholder="Escribe el nombre o modelo"
+          valorInicial={entrada.tipo === 'texto' ? entrada.consulta : ''}
+          onBuscar={(consulta) => router.setParams({ consulta, codigo: undefined, foto: undefined })}
+        />
+      </View>
+    </SafeAreaView>
+  );
+}
 
+function BarraSuperior() {
+  const theme = useTheme();
+  return (
+    <View style={styles.barraSuperior}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Cerrar"
+        onPress={() => router.dismissAll()}
+        style={({ pressed }) => [styles.cerrar, { backgroundColor: theme.superficie, opacity: pressed ? 0.6 : 1 }]}>
+        <X size={IconSize.md} color={theme.texto} />
+      </Pressable>
+      <ThemedText type="cuerpoFuerte">Resultado</ThemedText>
+      <View style={styles.cerrar} />
+    </View>
+  );
+}
+
+function VistaResultado({ r, entrada }: { r: DatosResultado; entrada: Entrada }) {
+  const theme = useTheme();
+  const { sonDeEjemplo } = useArticulos();
+
+  // Precio de venta para la calculadora: tus ventas primero; si no, la mediana de usados.
+  const ventaSugerida = r.tusVentas?.rango.mediana ?? r.usados?.rango?.mediana ?? null;
+  const [venta, setVenta] = useState(ventaSugerida ? String(Math.round(ventaSugerida)) : '');
+  const [ganancia, setGanancia] = useState('800');
   const maximo = (Number(venta) || 0) - (Number(ganancia) || 0);
-  const nuevos = r.ofertas.filter((o) => !o.usado);
-  const usados = r.ofertas.filter((o) => o.usado);
+
+  const fuenteVenta = useMemo(() => {
+    if (r.tusVentas) return `Mediana de tus ${r.tusVentas.rango.n} ventas`;
+    if (r.usados?.rango) return 'Mediana de usados en Google Shopping';
+    return 'Escribe en cuánto lo venderías';
+  }, [r]);
+
+  const comprar = () =>
+    router.push({
+      pathname: '/registrar',
+      params: {
+        nombre: r.nombre,
+        marca: r.marca ?? '',
+        maximo: String(Math.max(maximo, 0)),
+        foto: r.foto ?? '',
+      },
+    });
 
   return (
     <SafeAreaView edges={['top']} style={[styles.contenedor, { backgroundColor: theme.fondo }]}>
-      <View style={styles.barraSuperior}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Cerrar"
-          onPress={() => router.dismissAll()}
-          style={({ pressed }) => [styles.cerrar, { backgroundColor: theme.superficie, opacity: pressed ? 0.6 : 1 }]}>
-          <X size={IconSize.md} color={theme.texto} />
-        </Pressable>
-        <ThemedText type="cuerpoFuerte">Resultado</ThemedText>
-        <View style={styles.cerrar} />
-      </View>
+      <BarraSuperior />
 
       <ScrollView contentContainerStyle={styles.contenido} keyboardShouldPersistTaps="handled">
-        <AvisoEjemplo />
-        {consulta ? (
-          <ThemedText type="chico" themeColor="textoSecundario">
-            Buscaste «{consulta}». Con datos de ejemplo siempre sale el mismo artículo.
-          </ThemedText>
-        ) : null}
+        {sonDeEjemplo ? <AvisoEjemplo /> : null}
 
         <CampoBusqueda
           etiqueta="Corregir el nombre o modelo"
           placeholder="¿No es? Corrige el nombre"
-          onBuscar={(nueva) => router.setParams({ consulta: nueva })}
+          onBuscar={(consulta) => router.setParams({ consulta, codigo: undefined, foto: undefined })}
         />
 
         <Tarjeta style={styles.sugerencia}>
-          <View style={styles.sugerenciaFoto}>
-            <Miniatura categoria={r.categoria} tamano="chica" />
-          </View>
+          {r.foto ? (
+            <Image source={{ uri: r.foto }} style={styles.fotoChica} contentFit="cover" />
+          ) : (
+            <Miniatura categoria={null} tamano="chica" />
+          )}
           <View style={{ flex: 1, gap: Spacing.xs }}>
-            <Destacado texto="SUGERIDO" />
+            <Destacado texto={origenTexto(r.origen)} />
             <ThemedText type="cuerpoFuerte">{r.nombre}</ThemedText>
-            <ThemedText type="chico" themeColor="textoTenue">
-              {r.marca}
-              {r.lanzamiento ? ` · Lanzado en ${r.lanzamiento}` : ''}
-            </ThemedText>
+            {r.marca || r.lanzamiento ? (
+              <ThemedText type="chico" themeColor="textoTenue">
+                {[r.marca, r.lanzamiento ? `Lanzado en ${r.lanzamiento}` : null].filter(Boolean).join(' · ')}
+              </ThemedText>
+            ) : null}
           </View>
         </Tarjeta>
 
+        {r.alternativas.length ? (
+          <View style={{ gap: Spacing.sm }}>
+            <ThemedText type="chico" themeColor="textoSecundario">
+              ¿No es? Prueba con:
+            </ThemedText>
+            <View style={styles.pildoras}>
+              {r.alternativas.map((a) => (
+                <Pildora
+                  key={a}
+                  texto={a.length > 40 ? `${a.slice(0, 40)}…` : a}
+                  activa={false}
+                  onPress={() => router.setParams({ consulta: a, codigo: undefined, foto: undefined })}
+                />
+              ))}
+            </View>
+          </View>
+        ) : null}
+
+        {r.avisos.map((a) => (
+          <ThemedText key={a} type="chico" themeColor="textoSecundario">
+            {a}
+          </ThemedText>
+        ))}
+
         <View style={styles.dosColumnas}>
-          <Rango titulo="Nuevo" rango={r.nuevo} />
-          <Rango titulo="Usado" rango={r.usado} />
+          <Rango titulo="Nuevo" rango={r.nuevos?.rango ?? null} fuente="Google Shopping" />
+          <Rango titulo="Usado" rango={r.usados?.rango ?? null} fuente="Google Shopping" />
         </View>
+
+        {r.tusVentas ? (
+          <Tarjeta style={{ gap: 2 }}>
+            <View style={styles.tituloSeccion}>
+              <History size={IconSize.sm} color={theme.textoSecundario} />
+              <ThemedText type="cuerpoFuerte">Tus ventas de este artículo</ThemedText>
+            </View>
+            <ThemedText type="subtitulo" style={{ color: theme.dinero }}>
+              {pesos(r.tusVentas.rango.mediana)}
+            </ThemedText>
+            <ThemedText type="chico" themeColor="textoTenue">
+              {r.tusVentas.rango.n} {r.tusVentas.rango.n === 1 ? 'registro' : 'registros'} · {pesos(r.tusVentas.rango.min)} –{' '}
+              {pesos(r.tusVentas.rango.max)}
+              {r.tusVentas.diasMediana != null ? ` · se vende en ~${r.tusVentas.diasMediana} días` : ''}
+            </ThemedText>
+          </Tarjeta>
+        ) : null}
+
+        {r.mercadoLibre ? (
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Ver en Mercado Libre"
+            onPress={() => r.mercadoLibre && Linking.openURL(r.mercadoLibre.link)}>
+            <Tarjeta style={{ gap: 2 }}>
+              <View style={styles.tituloSeccion}>
+                <ThemedText type="cuerpoFuerte" style={{ flex: 1 }}>
+                  Mercado Libre (catálogo)
+                </ThemedText>
+                <ExternalLink size={14} color={theme.textoTenue} />
+              </View>
+              <ThemedText type="subtitulo">
+                {pesos(r.mercadoLibre.precios[0].precio)} – {pesos(r.mercadoLibre.precios[r.mercadoLibre.precios.length - 1].precio)}
+              </ThemedText>
+              <ThemedText type="chico" themeColor="textoTenue">
+                {r.mercadoLibre.total} {r.mercadoLibre.total === 1 ? 'publicación' : 'publicaciones'} del catálogo
+              </ThemedText>
+            </Tarjeta>
+          </Pressable>
+        ) : null}
 
         <Tarjeta style={styles.calculadora}>
           <View style={styles.tituloSeccion}>
             <Calculator size={IconSize.sm} color={theme.textoSecundario} />
             <ThemedText type="cuerpoFuerte">¿Cuánto pagar como máximo?</ThemedText>
           </View>
-          <Campo etiqueta="Lo venderías en" valor={venta} onCambio={setVenta} />
+          <Campo etiqueta="Lo venderías en" valor={venta} onCambio={setVenta} ayuda={fuenteVenta} />
           <Campo etiqueta="Ganancia que buscas" valor={ganancia} onCambio={setGanancia} />
           <View style={[styles.maximo, { backgroundColor: theme.superficieAlta }]}>
             <ThemedText themeColor="textoSecundario">Paga como máximo</ThemedText>
             <ThemedText type="titulo" style={{ color: maximo > 0 ? theme.dinero : theme.peligro }}>
-              {maximo > 0 ? pesos(maximo) : 'No conviene'}
+              {Number(venta) > 0 ? (maximo > 0 ? pesos(maximo) : 'No conviene') : '—'}
             </ThemedText>
           </View>
         </Tarjeta>
 
-        <ListaOfertas titulo={`Nuevos (${nuevos.length})`} ofertas={nuevos} />
-        <ListaOfertas titulo={`Usados y reacondicionados (${usados.length})`} ofertas={usados} />
-
+        {r.nuevos ? <ListaOfertas titulo="Nuevos" ofertas={r.nuevos.ofertas} /> : null}
+        {r.usados ? <ListaOfertas titulo="Usados y reacondicionados" ofertas={r.usados.ofertas} /> : null}
+        {r.lens.length ? (
+          <ListaOfertas titulo="Vistos por Google Lens" ofertas={r.lens.map((o) => ({ ...o, usado: false, condicion: '', miniatura: null }))} />
+        ) : null}
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={[styles.acciones, { borderTopColor: theme.borde, backgroundColor: theme.fondo }]}>
         <View style={{ flex: 1 }}>
-          <Boton texto={consulta ? 'Buscar otro' : 'Otra foto'} variante="secundario" onPress={() => router.back()} />
+          <Boton texto={entrada.tipo === 'texto' ? 'Buscar otro' : 'Otra foto'} variante="secundario" onPress={() => router.back()} />
         </View>
         <View style={{ flex: 1 }}>
-          <Boton
-            texto="Lo compré"
-            onPress={() =>
-              router.push({
-                pathname: '/registrar',
-                params: { nombre: r.nombre, marca: r.marca, categoria: r.categoria, maximo: String(Math.max(maximo, 0)) },
-              })
-            }
-          />
+          <Boton texto="Lo compré" onPress={comprar} />
         </View>
       </SafeAreaView>
     </SafeAreaView>
   );
 }
 
-function Rango({ titulo, rango }: { titulo: string; rango: { min: number; mediana: number; max: number } }) {
+function origenTexto(origen: DatosResultado['origen']) {
+  if (origen === 'etiqueta') return 'LEÍDO EN LA ETIQUETA';
+  if (origen === 'codigo') return 'POR CÓDIGO DE BARRAS';
+  if (origen === 'lens') return 'SUGERIDO POR LA FOTO';
+  if (origen === 'ejemplo') return 'SUGERIDO';
+  return 'BUSCADO';
+}
+
+function Rango({ titulo, rango, fuente }: { titulo: string; rango: { min: number; mediana: number; max: number } | null; fuente: string }) {
   const theme = useTheme();
   return (
     <Tarjeta style={{ flex: 1, gap: 2 }}>
       <ThemedText type="chico" themeColor="textoSecundario">
         {titulo}, precio típico
       </ThemedText>
-      <ThemedText type="subtitulo" style={{ color: theme.dinero }}>
-        {pesos(rango.mediana)}
-      </ThemedText>
-      <ThemedText type="chico" themeColor="textoTenue">
-        {pesos(rango.min)} – {pesos(rango.max)}
+      {rango ? (
+        <>
+          <ThemedText type="subtitulo" style={{ color: theme.dinero }}>
+            {pesos(Math.round(rango.mediana))}
+          </ThemedText>
+          <ThemedText type="chico" themeColor="textoTenue">
+            {pesos(rango.min)} – {pesos(rango.max)}
+          </ThemedText>
+        </>
+      ) : (
+        <ThemedText type="cuerpoFuerte" themeColor="textoTenue">
+          Sin datos
+        </ThemedText>
+      )}
+      <ThemedText type="etiqueta" themeColor="textoTenue">
+        {fuente}
       </ThemedText>
     </Tarjeta>
   );
 }
 
-function Campo({ etiqueta, valor, onCambio }: { etiqueta: string; valor: string; onCambio: (v: string) => void }) {
+function Campo({ etiqueta, valor, onCambio, ayuda }: { etiqueta: string; valor: string; onCambio: (v: string) => void; ayuda?: string }) {
   const theme = useTheme();
   return (
     <View style={{ gap: Spacing.xs }}>
@@ -198,27 +315,39 @@ function Campo({ etiqueta, valor, onCambio }: { etiqueta: string; valor: string;
           style={[styles.entrada, { color: theme.texto }]}
         />
       </View>
+      {ayuda ? (
+        <ThemedText type="etiqueta" themeColor="textoTenue">
+          {ayuda}
+        </ThemedText>
+      ) : null}
     </View>
   );
 }
 
-function ListaOfertas({ titulo, ofertas }: { titulo: string; ofertas: Oferta[] }) {
+function ListaOfertas({ titulo, ofertas }: { titulo: string; ofertas: OfertaApi[] }) {
   const theme = useTheme();
+  const [todas, setTodas] = useState(false);
+  if (!ofertas.length) return null;
+  const visibles = todas ? ofertas : ofertas.slice(0, VISIBLES);
+
   return (
     <View style={{ gap: Spacing.sm }}>
-      <ThemedText type="cuerpoFuerte">{titulo}</ThemedText>
-      {ofertas.map((o) => (
+      <ThemedText type="cuerpoFuerte">
+        {titulo} ({ofertas.length})
+      </ThemedText>
+      {visibles.map((o, i) => (
         <Pressable
-          key={o.link}
+          key={`${o.link}-${i}`}
           accessibilityRole="link"
-          accessibilityLabel={`${o.titulo}, ${o.tienda}, ${pesos(o.precio)}`}
+          accessibilityLabel={`${o.titulo}, ${o.tienda}, ${pesos(o.precio)}${o.aviso ? `, ${o.aviso}` : ''}`}
           onPress={() => Linking.openURL(o.link)}
-          style={({ pressed }) => [styles.oferta, { backgroundColor: theme.superficie, opacity: pressed ? 0.7 : 1 }]}>
+          style={({ pressed }) => [styles.oferta, { backgroundColor: theme.superficie, opacity: pressed ? 0.7 : o.aviso ? 0.55 : 1 }]}>
           <View style={{ flex: 1, gap: 2 }}>
             <ThemedText numberOfLines={1}>{o.titulo}</ThemedText>
             <View style={styles.tienda}>
-              <ThemedText type="chico" themeColor="textoTenue">
+              <ThemedText type="chico" themeColor="textoTenue" numberOfLines={1} style={{ flexShrink: 1 }}>
                 {o.tienda}
+                {o.aviso ? ` · ${o.aviso}` : ''}
               </ThemedText>
               <ExternalLink size={14} color={theme.textoTenue} />
             </View>
@@ -226,6 +355,9 @@ function ListaOfertas({ titulo, ofertas }: { titulo: string; ofertas: Oferta[] }
           <ThemedText type="precio">{pesos(o.precio)}</ThemedText>
         </Pressable>
       ))}
+      {ofertas.length > VISIBLES ? (
+        <Boton texto={todas ? 'Ver menos' : `Ver los ${ofertas.length}`} variante="secundario" onPress={() => setTodas((v) => !v)} />
+      ) : null}
     </View>
   );
 }
@@ -241,7 +373,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.xxl,
   },
   procesandoFoto: {
-    width: 160,
+    width: 180,
+    height: 180,
+    borderRadius: Radius.lg,
   },
   pasos: {
     flexDirection: 'row',
@@ -253,6 +387,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 6,
     borderRadius: Radius.pildora,
+  },
+  falla: {
+    padding: Spacing.lg,
   },
   barraSuperior: {
     flexDirection: 'row',
@@ -278,8 +415,15 @@ const styles = StyleSheet.create({
     gap: Spacing.md,
     alignItems: 'center',
   },
-  sugerenciaFoto: {
-    alignSelf: 'flex-start',
+  fotoChica: {
+    width: 56,
+    height: 56,
+    borderRadius: Radius.md,
+  },
+  pildoras: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
   },
   dosColumnas: {
     flexDirection: 'row',

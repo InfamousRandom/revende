@@ -28,8 +28,8 @@ function ayer(): string {
  * la fecha es hoy y la condición tiene un valor por defecto.
  */
 export default function Registrar() {
-  const params = useLocalSearchParams<{ nombre?: string; marca?: string; categoria?: string; maximo?: string }>();
-  const { articulos, sonDeEjemplo, registrarCompra } = useArticulos();
+  const params = useLocalSearchParams<{ nombre?: string; marca?: string; categoria?: string; maximo?: string; foto?: string }>();
+  const { articulos, sonDeEjemplo, registrarCompra, refrescar } = useArticulos();
   const theme = useTheme();
 
   const [nombre, setNombre] = useState(params.nombre ?? '');
@@ -91,8 +91,16 @@ export default function Registrar() {
       lugarCompra: lugar.trim() || null,
       notas: notas.trim() || null,
     });
+    if (!r.ok) {
+      setGuardando(false);
+      return setError(r.error);
+    }
+    // La foto del escaneo se guarda como portada del artículo (si falla, el artículo ya quedó).
+    if (params.foto && !sonDeEjemplo) {
+      await api.subirFoto(r.datos.id, params.foto, 'image/jpeg');
+      await refrescar(r.datos.id);
+    }
     setGuardando(false);
-    if (!r.ok) return setError(r.error);
     router.dismissAll();
     router.push({ pathname: '/articulo/[id]', params: { id: String(r.datos.id) } });
   };
