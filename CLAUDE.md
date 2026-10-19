@@ -51,6 +51,11 @@ producción hasta que la versión web de 2.0 la reemplace.
   `http://localhost:8081` para estas pruebas.
 - `wrangler dev` en Windows: si el almacenamiento local (KV/D1) da "internal error", revisar que no
   queden procesos `wrangler dev`/`workerd` viejos corriendo.
+- Rutas nuevas del Worker (2.0): `/api/emparejar`, `/api/operaciones/:id/fotos`, `/api/fotos/:id`
+  (R2 `FOTOS_ARTICULOS`), `/api/catalogo` y `/api/codigo` (`worker/catalogo.js`), `/api/cartas`
+  (`worker/cartas.js`), `/api/insight` y `/api/autenticidad` (IA, ocultas en la app).
+- Para probar la app en local sin el código real: `npx wrangler dev --var REVENDE_DISPOSITIVO:<prueba>`.
+  La búsqueda de precios en local sí gasta SerpApi real.
 
 ## Stack
 
@@ -83,6 +88,8 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 | `REVENDE_CLAVE` | Ya no se usa: el historial tampoco pide clave (2026-10-16) | Configurado, se puede borrar |
 | `GEMINI_API_KEY` | Gemini (ruta inactiva) | Configurado |
 | `SERPAPI_KEY` | Google Shopping y Google Lens vía SerpApi | Configurado |
+| `REVENDE_DISPOSITIVO` | Código para emparejar la app nativa | Configurado |
+| `ML_CLIENT_ID`, `ML_CLIENT_SECRET` | Catálogo de Mercado Libre (app propia de Pablo) | Pendiente en Cloudflare |
 
 ## Decisiones tomadas (y por qué)
 

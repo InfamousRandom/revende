@@ -86,75 +86,74 @@ Terminado cuando: el APK se instala, se empareja con el código y muestra las 5 
       "Lo compré" del resultado.
 - [x] Historial y estadísticas con datos reales. El respaldo CSV sigue en la web.
 - [x] Si el Worker rechaza el código guardado (401), la app vuelve a pedir emparejar.
-- [ ] Publicar (push a `main`: aplica la migración 0002 en producción) y compilar un APK nuevo
-      (la cámara y la galería de fotos son módulos nativos nuevos).
+- [x] Se publica junto con las fases V3 a V8 en un solo push y un solo APK (pedido de Pablo).
 
 Terminado cuando: registrar una compra con foto toma menos de 30 segundos y el historial anterior aparece completo.
 
 ## Fase V3: cámara, identificación y precios
 
-- [ ] Cámara a pantalla completa (`react-native-vision-camera`): disparador grande, galería, voltear,
-      esquinas guía, varias fotos por artículo, ajustes de brillo y cuadrícula.
-- [ ] Leer el texto de la etiqueta en el teléfono (ML Kit) para mejorar la búsqueda sin gastar cuota.
-- [ ] Código de barras desde la misma cámara.
-- [ ] Código de barras → nombre con UPCitemdb (gratis, 100 al día) antes de gastar una búsqueda.
-- [ ] Orden para identificar una foto: código de barras → etiqueta → Lens → IA con visión.
-- [ ] Búsqueda por texto (nombre y/o modelo) en la sección Buscar, y "¿No es? Corrige el nombre" en
-      el resultado. Solo busca al confirmar, nunca mientras se escribe.
-- [ ] Catálogo de Mercado Libre en el Worker:
+- [x] Cámara a pantalla completa con `expo-camera` (en lugar de vision-camera): disparador grande,
+      galería, voltear, esquinas guía, cuadrícula y modos IDENTIFICAR / CÓDIGO / LOTE / CARTAS.
+- [x] Leer el texto de la etiqueta en el teléfono (`expo-text-extractor`, ML Kit; no en la web).
+- [x] Código de barras desde la misma cámara (`GET /api/codigo`: Mercado Libre o UPCitemdb, gratis).
+- [x] Orden para identificar una foto: etiqueta con modelo reconocido por el catálogo → Lens.
+      Pendiente: IA con visión como respaldo (depende de Gemini).
+- [x] Búsqueda por texto (nombre y/o modelo) en Buscar y "¿No es? Corrige el nombre" en el resultado.
+- [x] Catálogo de Mercado Libre en el Worker (`worker/catalogo.js`):
   - [x] **(Pablo)** Crear la app en developers.mercadolibre.com.mx (hecho el 2026-10-19).
   - [ ] **(Pablo)** Guardar `ML_CLIENT_ID` y `ML_CLIENT_SECRET` en Cloudflare como Secrets
-        (en local ya están en `.dev.vars`).
-  - [ ] Token de app con `client_credentials` (dura 6 h), guardado en KV y renovado solo.
-  - [ ] `GET /api/catalogo?q=` → productos con nombre oficial, marca, modelo, color y año
-        (`/products/search` y `/products/{id}`), en cache KV 24 h.
-  - [ ] Precios de nuevo del catálogo (`/products/{id}/items`) cuando haya publicaciones, con link
-        y marcados como fuente "Mercado Libre".
-  - [ ] Filtrar accesorios: el catálogo los mezcla (fundas, cargadores) con el producto.
-- [ ] Año de lanzamiento: catálogo de Mercado Libre; si no viene, Wikidata.
-- [ ] Pantalla de procesando con avance por pasos.
-- [ ] Resultado: sugerencia con nombre, marca y año discreto, "¿No es? Corrige el nombre", precios
-      nuevos y usados con tienda y link (`/api/identificar` + `/api/precios` + `/api/catalogo`),
-      calculadora de precio máximo (sin gastos) y botón "Lo compré".
-- [ ] Capturas manuales de precio de usado, como hoy.
-
-Terminado cuando: una foto o un texto identifica el artículo, muestra precios con fuente y lo guarda
-en inventario; una foto con código o etiqueta legible gasta como máximo 1 búsqueda de SerpApi.
+        (en local ya están en `.dev.vars`). Sin ellos la app funciona, pero sin catálogo ni año.
+  - [x] Token de app con `client_credentials` (6 h), guardado en KV y renovado solo.
+  - [x] `GET /api/catalogo?q=` → nombre oficial, marca, modelo, color, año e imagen, en cache 24 h;
+        ordenado por palabras que coinciden y con `completo` cuando trae todas.
+  - [x] Precios de nuevo del catálogo cuando hay publicaciones, con link a Mercado Libre.
+  - [x] Filtrar accesorios (fundas, cargadores, lectores, etc.).
+- [x] Año de lanzamiento: catálogo de Mercado Libre. Pendiente: Wikidata cuando no viene.
+- [x] Pantalla de procesando con avance por pasos (según foto, código o texto).
+- [x] Resultado: sugerencia con origen, marca y año discreto, alternativas, precios nuevos y usados
+      con tienda y link, tus ventas, Mercado Libre, Lens, calculadora sin gastos y "Lo compré"
+      (la foto del escaneo se guarda como portada).
+- [ ] Capturas manuales de precio de usado en la app nativa (hoy siguen en la web).
 
 ## Fase V4: editor de fotos
 
-- [ ] Recortar, girar, borrar, deshacer y rehacer.
-- [ ] Quitar el fondo en el teléfono (ML Kit Subject Segmentation), sin servicios de pago.
-- [ ] Elegir portada.
+- [x] Recortar (cuadrado o vertical), girar, deshacer y rehacer; borrar o descartar.
+- [x] Quitar el fondo en el teléfono (`@six33/react-native-bg-removal`, ML Kit; solo Android).
+- [x] Elegir portada (desde la ficha). Pendiente: reordenar fotos arrastrando.
 
 ## Fase V5: escaneo masivo de lotes
 
-- [ ] Modo Lote: varias fotos o códigos seguidos, cola de procesamiento y resumen del lote (costo
-      total, valor estimado con fuente por artículo).
-- [ ] Avisar cuántas búsquedas de SerpApi gastará el lote antes de empezar.
+- [x] Modo LOTE en la cámara (fotos y códigos), pantalla `lote` con búsqueda uno por uno y botón
+      para parar, valor de reventa del lote con su fuente y veredicto contra lo que piden.
+- [x] Avisa cuántas búsquedas puede gastar y cuántas quedan en el mes antes de empezar.
 
 ## Fase V6: cartas Pokémon
 
-- [ ] Modo Cartas en la cámara: identificar la carta por nombre y número.
-- [ ] Precios desde la API pública de Pokémon TCG (precios de TCGplayer en USD), siempre con su fuente.
-- [ ] Si se muestra en pesos, indicar el tipo de cambio y de dónde sale.
+- [x] Modo CARTAS en la cámara: lee nombre y número de la carta en el teléfono.
+- [x] `GET /api/cartas` (Pokémon TCG API): precio de mercado de TCGplayer en USD por variante.
+- [x] Pesos con tipo de cambio del día (BCE vía Frankfurter), siempre con fecha y fuente.
 
 ## Fase V7: estadísticas
 
-- [ ] Ganancia del mes, dinero invertido en inventario, días promedio para vender, mejores y peores categorías.
-- [ ] Pantallas vacías con explicación cuando todavía no hay datos.
+- [x] Ganancia del mes, invertido ahora, días para vender y ganancia por categoría (mejor a peor).
+- [x] Pantallas vacías con explicación cuando todavía no hay datos.
 
 ## Fase V8: funciones ocultas (IA)
 
-- [ ] Interruptor en el código (`FUNCIONES`), apagado por defecto.
-- [ ] Revisar si es auténtico.
-- [ ] Insight: si conviene comprar para revender, siempre con sus fuentes.
-- [ ] Dependen de Gemini (hoy pausado por prepago); no se activan hasta decidirlo.
+- [x] Interruptor `FUNCIONES` en `movil/src/constants/funciones.ts`, apagado.
+- [x] "¿Es original?" (`POST /api/autenticidad`) e Insight (`POST /api/insight`, con fuentes).
+- [ ] Activarlas cuando haya saldo en Gemini (hoy responde 402).
 
 ## Fase V9: versión web
 
-- [ ] Activar Expo web con alternativas para la cámara, la lectura de etiquetas y quitar el fondo.
-- [ ] Reemplazar la web de Next.js en Cloudflare y retirar la verificación por mismo origen.
+- [ ] Esperar a que la app nativa esté estable (acordado con Pablo).
+- [ ] Exportar Expo web a `out/` desde el `npm run build` de la raíz para reemplazar la web de Next.js,
+      y retirar la verificación por mismo origen.
+
+## Pendiente externo
+
+- [ ] eBay: cuenta de desarrollador en revisión. Al aprobarla: claves en `.dev.vars` y Cloudflare,
+      ruta de precios de usados como referencia internacional (USD, con tipo de cambio).
 
 ## Pendientes por decidir
 
