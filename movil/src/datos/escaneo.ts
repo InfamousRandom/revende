@@ -34,3 +34,16 @@ export function modeloEnEtiqueta(lineas: string[]): string | null {
   if (!candidatos.length) return null;
   return candidatos.sort((a, b) => b.length - a.length)[0].toUpperCase();
 }
+
+// Palabras impresas en las cartas que no son el nombre.
+const NO_NOMBRE = /^(hp|basic|basico|stage\s*\d|etapa|pokemon|trainer|entrenador|energy|energia|weakness|resistance|retreat|illus\.?.*|ability|habilidad)$/i;
+
+/** Nombre y número de una carta Pokémon a partir del texto de la foto (ej. "Charizard ex", "199"). */
+export function datosDeCarta(lineas: string[]): { nombre: string; numero: string } {
+  const numero = lineas.map((l) => /(\d{1,3})\s*\/\s*\d{1,3}/.exec(l)?.[1]).find(Boolean) ?? '';
+  const nombre =
+    lineas
+      .map((l) => l.replace(/\b\d+\s*hp\b|\bhp\s*\d+\b/gi, '').trim())
+      .find((l) => /^[A-Za-zÀ-ÿ'’.\- ]{3,30}$/.test(l) && !NO_NOMBRE.test(l)) ?? '';
+  return { nombre, numero: numero.replace(/^0+/, '') };
+}

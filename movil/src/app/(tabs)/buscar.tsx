@@ -1,10 +1,11 @@
 import { router } from 'expo-router';
-import { Search } from 'lucide-react-native';
+import { Layers, Package, Search } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { CampoBusqueda } from '@/components/campo-busqueda';
 import { Pantalla } from '@/components/pantalla';
 import { PantallaVacia } from '@/components/pantalla-vacia';
+import { Boton } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 
 export default function Buscar() {
@@ -16,6 +17,10 @@ export default function Buscar() {
           placeholder="Nombre o modelo, ej. PS5 Slim"
           onBuscar={(consulta) => router.push({ pathname: '/resultado', params: { consulta } })}
         />
+      </View>
+      <View style={styles.atajos}>
+        <Boton texto="Cartas Pokémon" variante="secundario" Icono={Layers} onPress={() => router.push('/cartas')} />
+        <Boton texto="Ver lote" variante="secundario" Icono={Package} onPress={() => router.push('/lote')} />
       </View>
       <PantallaVacia
         Icono={Search}
@@ -30,5 +35,11 @@ const styles = StyleSheet.create({
   campo: {
     paddingHorizontal: Spacing.lg,
     paddingTop: Spacing.sm,
+  },
+  atajos: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.md,
   },
 });

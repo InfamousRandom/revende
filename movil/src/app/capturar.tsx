@@ -11,14 +11,16 @@ import { ThemedText } from '@/components/themed-text';
 import { Boton } from '@/components/ui';
 import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import { USAR_DATOS_DE_EJEMPLO } from '@/datos/ejemplo';
+import { datosDeCarta, leerEtiqueta, reducirFoto } from '@/datos/escaneo';
 import { agregarAlLote, useLote } from '@/datos/lote';
 import { useTheme } from '@/hooks/use-theme';
 
-export type Modo = 'identificar' | 'codigo' | 'lote';
+export type Modo = 'identificar' | 'codigo' | 'lote' | 'cartas';
 const MODOS: { id: Modo; nombre: string; ayuda: string }[] = [
   { id: 'identificar', nombre: 'IDENTIFICAR', ayuda: 'Tómale foto y te decimos qué es y cuánto vale' },
   { id: 'codigo', nombre: 'CÓDIGO', ayuda: 'Apunta al código de barras' },
   { id: 'lote', nombre: 'LOTE', ayuda: 'Toma una foto o lee el código de cada artículo; al final buscamos todos' },
+  { id: 'cartas', nombre: 'CARTAS', ayuda: 'Foto de la carta Pokémon completa, con el nombre y el número visibles' },
 ];
 const CODIGOS = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
 
@@ -51,6 +53,10 @@ export default function Capturar() {
       if (modo === 'lote') {
         agregarAlLote({ tipo: 'foto', uri: foto.uri });
         avisarAgregado(`Agregado al lote (${lote.length + 1})`);
+      } else if (modo === 'cartas') {
+        avisarAgregado('Leyendo la carta…');
+        const datos = datosDeCarta(await leerEtiqueta(await reducirFoto(foto.uri)));
+        router.replace({ pathname: '/cartas', params: datos });
       } else {
         irAResultado({ foto: foto.uri });
       }
@@ -368,7 +374,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.lg,
+    flexWrap: 'wrap',
+    gap: Spacing.xs,
   },
   modo: {
     minHeight: TocableMinimo,

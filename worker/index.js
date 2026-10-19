@@ -2,6 +2,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { ENCABEZADO_DISPOSITIVO, json, normalizar, verificarAcceso } from './util.js';
 import { catalogo, codigoDeBarras } from './catalogo.js';
+import { cartas } from './cartas.js';
 import { historial, esRutaHistorial, productosDelCatalogo } from './historial.js';
 const MODELO_DEFECTO = 'gemini-3-flash-preview';
 
@@ -551,12 +552,13 @@ async function manejar(request, env, url) {
     }
   }
 
-  // Catálogo de Mercado Libre y código de barras (no gastan SerpApi).
-  if (url.pathname === '/api/catalogo' || url.pathname === '/api/codigo') {
+  // Catálogo de Mercado Libre, código de barras y cartas Pokémon (no gastan SerpApi).
+  if (url.pathname === '/api/catalogo' || url.pathname === '/api/codigo' || url.pathname === '/api/cartas') {
     if (request.method !== 'GET') return json({ ok: false, error: 'Usa GET' }, 405);
     const sinPermiso = await verificarAcceso(request, env);
     if (sinPermiso) return sinPermiso;
     try {
+      if (url.pathname === '/api/cartas') return await cartas(env, url);
       return url.pathname === '/api/catalogo' ? await catalogo(env, url) : await codigoDeBarras(env, url);
     } catch (e) {
       return json({ ok: false, error: 'No se pudo consultar el catálogo. Intenta de nuevo.', detalle: String(e).slice(0, 200) }, 502);

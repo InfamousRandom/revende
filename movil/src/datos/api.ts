@@ -203,3 +203,28 @@ export function buscarReferencias(q: string, precioNuevo?: number) {
 export function cuota() {
   return llamar<{ restantes: number; mensuales: number }>('/api/cuota');
 }
+
+// ---------- Cartas Pokémon ----------
+
+export type CartaApi = {
+  id: string;
+  nombre: string;
+  numero: string;
+  total: number | null;
+  expansion: string | null;
+  lanzamiento: number | null;
+  rareza: string | null;
+  imagen: string | null;
+  link: string | null;
+  actualizado: string | null;
+  precios: { variante: string; mercado: number | null; bajo: number | null; alto: number | null }[];
+};
+export type CambioApi = { usd_mxn: number; fecha: string; fuente: string } | null;
+
+/** Pokémon TCG API (precios de TCGplayer en dólares) + tipo de cambio del día. Gratis. */
+export function buscarCartas(nombre: string, numero: string) {
+  const p = new URLSearchParams();
+  if (nombre) p.set('nombre', nombre);
+  if (numero) p.set('numero', numero);
+  return llamar<{ cartas: CartaApi[]; cambio: CambioApi; fuente: string }>(`/api/cartas?${p}`);
+}
