@@ -1,6 +1,6 @@
 // Worker de Revende: sirve la app (archivos de ./out) y las rutas /api.
 import { DurableObject } from 'cloudflare:workers';
-import { json, normalizar, verificarOrigen } from './util.js';
+import { ENCABEZADO_DISPOSITIVO, json, normalizar, verificarAcceso } from './util.js';
 import { historial, esRutaHistorial, productosDelCatalogo } from './historial.js';
 const MODELO_DEFECTO = 'gemini-3-flash-preview';
 
@@ -56,7 +56,7 @@ function leerJSON(texto) {
 async function analizar(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
   if (!env.GEMINI_API_KEY) return json({ ok: false, error: 'Falta GEMINI_API_KEY en Cloudflare' }, 500);
-  const sinPermiso = verificarOrigen(request);
+  const sinPermiso = await verificarAcceso(request, env);
   if (sinPermiso) return sinPermiso;
 
   let consulta = '';
@@ -213,7 +213,7 @@ async function buscarSerpApi(consulta, env) {
 
 async function precios(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
-  const sinPermiso = verificarOrigen(request);
+  const sinPermiso = await verificarAcceso(request, env);
   if (sinPermiso) return sinPermiso;
   if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
 
@@ -405,7 +405,7 @@ async function buscarLens(urlImagen, env) {
 
 async function identificar(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
-  const sinPermiso = verificarOrigen(request);
+  const sinPermiso = await verificarAcceso(request, env);
   if (sinPermiso) return sinPermiso;
   if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
   if (!env.FOTOS) return json({ ok: false, error: 'Falta configurar el almacenamiento temporal de fotos' }, 500);
@@ -467,7 +467,7 @@ async function servirImagen(nombre, request, env) {
 
 async function cuota(request, env) {
   if (request.method !== 'GET') return json({ ok: false, error: 'Usa GET' }, 405);
-  const sinPermiso = verificarOrigen(request);
+  const sinPermiso = await verificarAcceso(request, env);
   if (sinPermiso) return sinPermiso;
   if (!env.SERPAPI_KEY) return json({ ok: false, error: 'Falta configurar la llave de SerpApi en Cloudflare' }, 500);
 
@@ -488,66 +488,103 @@ async function cuota(request, env) {
   });
 }
 
+// Solo para probar la app nativa en el navegador (Expo web en local). La app en el celular no
+// necesita CORS, y ningún otro origen recibe estos encabezados.
+const ORIGEN_EXPO_LOCAL = 'http://localhost:8081';
+
+function conCors(request, respuesta) {
+  if (request.headers.get('origin') !== ORIGEN_EXPO_LOCAL) return respuesta;
+  const r = new Response(respuesta.body, respuesta);
+  r.headers.set('Access-Control-Allow-Origin', ORIGEN_EXPO_LOCAL);
+  r.headers.set('Vary', 'Origin');
+  return r;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
-    // Verificacion: dice que esta configurado, sin mostrar valores.
-    if (url.pathname === '/api/salud') {
-      return json({
-        ok: true,
-        gemini: Boolean(env.GEMINI_API_KEY),
-        serpapi: Boolean(env.SERPAPI_KEY),
-        cache: Boolean(env.CACHE),
-      });
-    }
-
-    // Historial (D1): productos y operaciones. Protegido con clave.
-    if (esRutaHistorial(url.pathname)) {
-      try {
-        return await historial(request, env, url);
-      } catch (e) {
-        return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+    if (request.headers.get('origin') === ORIGEN_EXPO_LOCAL && url.pathname.startsWith('/api/')) {
+      if (request.method === 'OPTIONS') {
+        return new Response(null, {
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': ORIGEN_EXPO_LOCAL,
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': `Content-Type, ${ENCABEZADO_DISPOSITIVO}`,
+            'Access-Control-Max-Age': '600',
+          },
+        });
       }
+      return conCors(request, await manejar(request, env, url));
     }
-
-    if (url.pathname.startsWith('/api/img/')) {
-      return servirImagen(url.pathname.slice('/api/img/'.length), request, env);
-    }
-
-    if (url.pathname === '/api/identificar') {
-      try {
-        return await identificar(request, env);
-      } catch (e) {
-        return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
-      }
-    }
-
-    if (url.pathname === '/api/cuota') {
-      try {
-        return await cuota(request, env);
-      } catch (e) {
-        return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
-      }
-    }
-
-    if (url.pathname === '/api/precios') {
-      try {
-        return await precios(request, env);
-      } catch (e) {
-        return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
-      }
-    }
-
-    if (url.pathname === '/api/analizar') {
-      try {
-        return await analizar(request, env);
-      } catch (e) {
-        return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
-      }
-    }
-
-    // Todo lo demas: la app.
-    return env.ASSETS.fetch(request);
+    return manejar(request, env, url);
   },
 };
+
+async function manejar(request, env, url) {
+  // Verificacion: dice que esta configurado, sin mostrar valores.
+  if (url.pathname === '/api/salud') {
+    return json({
+      ok: true,
+      gemini: Boolean(env.GEMINI_API_KEY),
+      serpapi: Boolean(env.SERPAPI_KEY),
+      cache: Boolean(env.CACHE),
+      dispositivo: Boolean(env.REVENDE_DISPOSITIVO),
+    });
+  }
+
+  // App nativa: confirma que el código del dispositivo es correcto (pantalla de emparejar).
+  if (url.pathname === '/api/emparejar') {
+    if (request.method !== 'GET') return json({ ok: false, error: 'Usa GET' }, 405);
+    if (!request.headers.has(ENCABEZADO_DISPOSITIVO)) return json({ ok: false, error: 'Falta el código del dispositivo.' }, 400);
+    return (await verificarAcceso(request, env)) || json({ ok: true });
+  }
+
+  // Historial (D1): productos y operaciones. Protegido con clave.
+  if (esRutaHistorial(url.pathname)) {
+    try {
+      return await historial(request, env, url);
+    } catch (e) {
+      return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+    }
+  }
+
+  if (url.pathname.startsWith('/api/img/')) {
+    return servirImagen(url.pathname.slice('/api/img/'.length), request, env);
+  }
+
+  if (url.pathname === '/api/identificar') {
+    try {
+      return await identificar(request, env);
+    } catch (e) {
+      return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+    }
+  }
+
+  if (url.pathname === '/api/cuota') {
+    try {
+      return await cuota(request, env);
+    } catch (e) {
+      return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+    }
+  }
+
+  if (url.pathname === '/api/precios') {
+    try {
+      return await precios(request, env);
+    } catch (e) {
+      return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+    }
+  }
+
+  if (url.pathname === '/api/analizar') {
+    try {
+      return await analizar(request, env);
+    } catch (e) {
+      return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+    }
+  }
+
+  // Todo lo demas: la app.
+  return env.ASSETS.fetch(request);
+}

@@ -1,6 +1,6 @@
 // Fase 3: historial en D1 (catálogo de productos y operaciones de compra/venta).
 // Sin clave (decisión de Pablo, 2026-10-16): como precios, solo acepta llamadas desde la app.
-import { json, normalizar, verificarOrigen } from './util.js';
+import { json, normalizar, verificarAcceso } from './util.js';
 import { escribirCsv, leerCsv } from './csv.js';
 
 const CONDICIONES = ['sellado', 'como_nuevo', 'usado_bueno', 'con_detalles'];
@@ -32,8 +32,8 @@ const fallar = (mensaje) => {
   throw new ErrorDatos(mensaje);
 };
 
-function verificarAcceso(request, env) {
-  const fuera = verificarOrigen(request);
+async function verificarHistorial(request, env) {
+  const fuera = await verificarAcceso(request, env);
   if (fuera) return fuera;
   if (!env.DB) return json({ ok: false, error: 'Falta configurar la base de datos (D1)' }, 500);
   return null;
@@ -671,7 +671,7 @@ async function importar(request, env, url) {
 // ---------- Enrutador ----------
 
 export async function historial(request, env, url) {
-  const sinPermiso = verificarAcceso(request, env);
+  const sinPermiso = await verificarHistorial(request, env);
   if (sinPermiso) return sinPermiso;
   const ruta = url.pathname;
   const metodo = request.method;
