@@ -228,3 +228,23 @@ export function buscarCartas(nombre: string, numero: string) {
   if (numero) p.set('numero', numero);
   return llamar<{ cartas: CartaApi[]; cambio: CambioApi; fuente: string }>(`/api/cartas?${p}`);
 }
+
+// ---------- IA (Fase V8, oculta con FUNCIONES) ----------
+
+export type InsightApi = {
+  resultado: { veredicto: 'buena' | 'regular' | 'mala'; resumen: string; razones: string[]; riesgos: string[] };
+  fuentes: { titulo: string; url: string }[];
+};
+
+export function pedirInsight(datos: { nombre: string; nuevo?: number; usado?: number; tus_ventas?: number }) {
+  return llamar<InsightApi>('/api/insight', conJson('POST', datos));
+}
+
+export type AutenticidadApi = {
+  resultado: { nivel: 'sin_alertas' | 'dudoso' | 'posible_imitacion'; resumen: string; señales: string[]; revisar: string[] };
+};
+
+export async function revisarAutenticidad(uri: string) {
+  const archivo = await (await fetch(uri)).blob();
+  return llamar<AutenticidadApi>('/api/autenticidad', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: archivo });
+}

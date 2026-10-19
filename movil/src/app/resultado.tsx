@@ -6,9 +6,11 @@ import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'rea
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CampoBusqueda } from '@/components/campo-busqueda';
+import { TarjetaAutenticidad, TarjetaInsight } from '@/components/ia';
 import { PantallaVacia } from '@/components/pantalla-vacia';
 import { ThemedText } from '@/components/themed-text';
 import { AvisoEjemplo, Boton, Destacado, Miniatura, Pildora, Tarjeta } from '@/components/ui';
+import { FUNCIONES } from '@/constants/funciones';
 import { Fonts, IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import type { OfertaApi } from '@/datos/api';
 import { useArticulos } from '@/datos/articulos';
@@ -226,6 +228,16 @@ function VistaResultado({ r, entrada }: { r: DatosResultado; entrada: Entrada })
             </Tarjeta>
           </Pressable>
         ) : null}
+
+        {FUNCIONES.insight ? (
+          <TarjetaInsight
+            nombre={r.nombre}
+            nuevo={r.nuevos?.rango?.mediana}
+            usado={r.usados?.rango?.mediana}
+            tus_ventas={r.tusVentas?.rango.mediana}
+          />
+        ) : null}
+        {FUNCIONES.autenticidad && r.foto ? <TarjetaAutenticidad foto={r.foto} /> : null}
 
         <Tarjeta style={styles.calculadora}>
           <View style={styles.tituloSeccion}>

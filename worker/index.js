@@ -55,6 +55,75 @@ function leerJSON(texto) {
   }
 }
 
+// ---------- Revende 2.0, Fase V8: funciones con IA (ocultas en la app hasta activarlas) ----------
+// Dependen de Gemini, que hoy responde 402 (cuenta en prepago). No inventan precios: el Insight
+// recibe los precios ya encontrados y la IA solo opina, siempre con sus fuentes.
+
+const pesosTexto = (n) => (Number.isFinite(n) && n > 0 ? `$${Math.round(n)} MXN` : 'sin dato');
+
+function textoGemini(datos) {
+  const candidato = datos.candidates?.[0];
+  const texto = (candidato?.content?.parts || []).filter((p) => p.text && !p.thought).map((p) => p.text).join('');
+  const fuentes = (candidato?.groundingMetadata?.groundingChunks || [])
+    .map((c) => c.web)
+    .filter(Boolean)
+    .map((w) => ({ titulo: w.title || '', url: w.uri || '' }));
+  return { texto, fuentes };
+}
+
+// POST /api/insight { nombre, nuevo, usado, tus_ventas } → ¿conviene para revender?
+async function insight(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
+  const sinPermiso = await verificarAcceso(request, env);
+  if (sinPermiso) return sinPermiso;
+  if (!env.GEMINI_API_KEY) return json({ ok: false, error: 'Falta GEMINI_API_KEY en Cloudflare' }, 500);
+  let c = {};
+  try {
+    c = await request.json();
+  } catch {}
+  const nombre = String(c.nombre || '').trim().slice(0, 160);
+  if (nombre.length < 2) return json({ ok: false, error: 'Falta el nombre del artículo' }, 400);
+
+  const prompt = `Ayudas a una persona que compra artículos usados para revenderlos en persona o por Facebook Marketplace en México.
+Artículo: "${nombre}".
+Precios ya encontrados (no inventes otros): nuevo típico ${pesosTexto(c.nuevo)}, usado típico ${pesosTexto(c.usado)}, sus propias ventas ${pesosTexto(c.tus_ventas)}.
+Busca en Google qué tan buscado está este artículo en México ahora y si se vende rápido de segunda mano.
+Responde SOLO un objeto JSON: {"veredicto": "buena" | "regular" | "mala", "resumen": "una frase en español de México, sin tecnicismos", "razones": ["máximo 3"], "riesgos": ["máximo 3, ej. falsificaciones comunes, piezas que fallan"]}.
+No des precios nuevos; si no sabes algo, dilo.`;
+  const r = await llamarGemini(env, { contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }] });
+  if (!r.ok) return json({ ok: false, error: r.status === 402 ? 'La IA está pausada (falta saldo en Google).' : `La IA respondió ${r.status}` }, 502);
+  const { texto, fuentes } = textoGemini(await r.json());
+  const resultado = leerJSON(texto);
+  if (!resultado) return json({ ok: false, error: 'No se pudo leer la respuesta de la IA' }, 502);
+  return json({ ok: true, resultado, fuentes });
+}
+
+// POST /api/autenticidad (imagen JPEG) → señales visibles de original o de imitación.
+async function autenticidad(request, env) {
+  if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
+  const sinPermiso = await verificarAcceso(request, env);
+  if (sinPermiso) return sinPermiso;
+  if (!env.GEMINI_API_KEY) return json({ ok: false, error: 'Falta GEMINI_API_KEY en Cloudflare' }, 500);
+  const tipo = (request.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(tipo)) return json({ ok: false, error: 'Manda una foto' }, 415);
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (!bytes.byteLength || bytes.byteLength > 4 * 1024 * 1024) return json({ ok: false, error: 'La foto está vacía o pesa más de 4 MB' }, 413);
+  let binario = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binario += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+
+  const prompt = `Revisa esta foto de un artículo que alguien quiere comprar para revender en México.
+Describe solo señales VISIBLES de que es original o de que podría ser imitación (costuras, logos, tipografía, etiquetas, acabados, números de serie).
+Nunca afirmes que es 100% original: solo una revisión en persona o del fabricante lo confirma.
+Responde SOLO un objeto JSON: {"nivel": "sin_alertas" | "dudoso" | "posible_imitacion", "resumen": "una frase en español de México", "señales": ["lo que se ve bien, máximo 4"], "revisar": ["qué revisar en persona, máximo 4"]}.`;
+  const r = await llamarGemini(env, {
+    contents: [{ role: 'user', parts: [{ text: prompt }, { inline_data: { mime_type: tipo, data: btoa(binario) } }] }],
+  });
+  if (!r.ok) return json({ ok: false, error: r.status === 402 ? 'La IA está pausada (falta saldo en Google).' : `La IA respondió ${r.status}` }, 502);
+  const resultado = leerJSON(textoGemini(await r.json()).texto);
+  if (!resultado) return json({ ok: false, error: 'No se pudo leer la respuesta de la IA' }, 502);
+  return json({ ok: true, resultado });
+}
+
 async function analizar(request, env) {
   if (request.method !== 'POST') return json({ ok: false, error: 'Usa POST' }, 405);
   if (!env.GEMINI_API_KEY) return json({ ok: false, error: 'Falta GEMINI_API_KEY en Cloudflare' }, 500);
@@ -588,6 +657,14 @@ async function manejar(request, env, url) {
   if (url.pathname === '/api/precios') {
     try {
       return await precios(request, env);
+    } catch (e) {
+      return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
+    }
+  }
+
+  if (url.pathname === '/api/insight' || url.pathname === '/api/autenticidad') {
+    try {
+      return url.pathname === '/api/insight' ? await insight(request, env) : await autenticidad(request, env);
     } catch (e) {
       return json({ ok: false, error: 'Error interno', detalle: String(e).slice(0, 300) }, 500);
     }
