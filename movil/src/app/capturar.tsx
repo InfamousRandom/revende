@@ -1,7 +1,7 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { Camera, FlaskConical, Grid3x3, Images, PencilLine, RefreshCw, X } from 'lucide-react-native';
+import { Camera, FlaskConical, Grid3x3, Images, Layers, PencilLine, RefreshCw, X } from 'lucide-react-native';
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -11,12 +11,14 @@ import { ThemedText } from '@/components/themed-text';
 import { Boton } from '@/components/ui';
 import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import { USAR_DATOS_DE_EJEMPLO } from '@/datos/ejemplo';
+import { agregarAlLote, useLote } from '@/datos/lote';
 import { useTheme } from '@/hooks/use-theme';
 
-export type Modo = 'identificar' | 'codigo';
+export type Modo = 'identificar' | 'codigo' | 'lote';
 const MODOS: { id: Modo; nombre: string; ayuda: string }[] = [
   { id: 'identificar', nombre: 'IDENTIFICAR', ayuda: 'Tómale foto y te decimos qué es y cuánto vale' },
   { id: 'codigo', nombre: 'CÓDIGO', ayuda: 'Apunta al código de barras' },
+  { id: 'lote', nombre: 'LOTE', ayuda: 'Toma una foto o lee el código de cada artículo; al final buscamos todos' },
 ];
 const CODIGOS = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
 
@@ -30,6 +32,13 @@ export default function Capturar() {
   const [cuadricula, setCuadricula] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const leido = useRef(false);
+  const lote = useLote();
+  const [agregado, setAgregado] = useState<string | null>(null);
+
+  const avisarAgregado = (texto: string) => {
+    setAgregado(texto);
+    setTimeout(() => setAgregado(null), 1200);
+  };
 
   const irAResultado = (params: { foto?: string; codigo?: string }) => router.replace({ pathname: '/resultado', params });
 
@@ -38,7 +47,13 @@ export default function Capturar() {
     setOcupado(true);
     try {
       const foto = await camara.current.takePictureAsync({ quality: 0.8 });
-      if (foto?.uri) irAResultado({ foto: foto.uri });
+      if (!foto?.uri) return;
+      if (modo === 'lote') {
+        agregarAlLote({ tipo: 'foto', uri: foto.uri });
+        avisarAgregado(`Agregado al lote (${lote.length + 1})`);
+      } else {
+        irAResultado({ foto: foto.uri });
+      }
     } finally {
       setOcupado(false);
     }
@@ -51,6 +66,10 @@ export default function Capturar() {
 
   const alLeerCodigo = ({ data }: BarcodeScanningResult) => {
     if (leido.current || !/^\d{8,14}$/.test(data)) return;
+    if (modo === 'lote') {
+      if (agregarAlLote({ tipo: 'codigo', codigo: data })) avisarAgregado(`Código ${data} agregado (${lote.length + 1})`);
+      return;
+    }
     leido.current = true;
     irAResultado({ codigo: data });
   };
@@ -95,7 +114,7 @@ export default function Capturar() {
         style={StyleSheet.absoluteFill}
         facing={frontal ? 'front' : 'back'}
         barcodeScannerSettings={{ barcodeTypes: [...CODIGOS] }}
-        onBarcodeScanned={modo === 'codigo' ? alLeerCodigo : undefined}
+        onBarcodeScanned={modo === 'codigo' || modo === 'lote' ? alLeerCodigo : undefined}
       />
 
       {cuadricula ? (
@@ -142,17 +161,30 @@ export default function Capturar() {
         </View>
 
         <View style={styles.abajo}>
-          <View style={styles.globo}>
+          <View style={styles.globo} aria-live="polite">
             <ThemedText type="cuerpoFuerte" style={styles.textoGlobo}>
-              {ayuda}
+              {agregado ?? ayuda}
             </ThemedText>
           </View>
+
+          {modo === 'lote' && lote.length ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Ver lote, ${lote.length} artículos`}
+              onPress={() => router.replace('/lote')}
+              style={({ pressed }) => [styles.verLote, { backgroundColor: theme.primario, opacity: pressed ? 0.8 : 1 }]}>
+              <Layers size={IconSize.sm} color="#FFFFFF" />
+              <ThemedText type="cuerpoFuerte" style={{ color: '#FFFFFF' }}>
+                Ver lote ({lote.length})
+              </ThemedText>
+            </Pressable>
+          ) : null}
 
           <View style={styles.controles}>
             <Pressable accessibilityRole="button" accessibilityLabel="Elegir de la galería" onPress={desdeGaleria} style={styles.circularGrande}>
               <Images size={IconSize.lg} color="#FFFFFF" />
             </Pressable>
-            {modo === 'identificar' ? (
+            {modo !== 'codigo' ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Tomar foto"
@@ -318,6 +350,15 @@ const styles = StyleSheet.create({
     height: 66,
     borderRadius: 33,
     backgroundColor: '#FFFFFF',
+  },
+  verLote: {
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    minHeight: TocableMinimo,
+    paddingHorizontal: Spacing.xl,
+    borderRadius: Radius.pildora,
   },
   disparadorVacio: {
     width: 84,

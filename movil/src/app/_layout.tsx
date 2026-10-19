@@ -75,6 +75,7 @@ function Rutas() {
         <Stack.Screen name="articulo/[id]" />
         <Stack.Screen name="registrar" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="editor" options={{ presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="lote" options={{ presentation: 'fullScreenModal' }} />
       </Stack.Protected>
       <Stack.Protected guard={!dentro}>
         <Stack.Screen name="emparejar" />

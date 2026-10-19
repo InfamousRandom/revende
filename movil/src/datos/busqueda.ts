@@ -65,7 +65,8 @@ export function useBusqueda(entrada: Entrada, deEjemplo: boolean): Estado {
   return estado;
 }
 
-async function buscar(entrada: Entrada, avanzar: (paso: number) => void): Promise<Resultado> {
+/** La misma búsqueda sin pantalla (para el modo Lote). */
+export async function buscar(entrada: Entrada, avanzar: (paso: number) => void = () => {}): Promise<Resultado> {
   let nombre = '';
   let origen: Resultado['origen'] = 'texto';
   let alternativas: string[] = [];
@@ -138,7 +139,7 @@ async function buscar(entrada: Entrada, avanzar: (paso: number) => void): Promis
 }
 
 // Modo de ejemplo: mismo recorrido con pausas y datos inventados.
-async function buscarEjemplo(entrada: Entrada, avanzar: (paso: number) => void): Promise<Resultado> {
+export async function buscarEjemplo(entrada: Entrada, avanzar: (paso: number) => void = () => {}): Promise<Resultado> {
   const pasos = PASOS[entrada.tipo].length;
   for (let i = 1; i < pasos - 1; i++) {
     await esperar(600);
