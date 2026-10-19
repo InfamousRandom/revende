@@ -7,6 +7,7 @@ import {
   ChevronLeft,
   CircleCheck,
   EllipsisVertical,
+  Pencil,
   ImagePlus,
   Images,
   RotateCcw,
@@ -14,8 +15,8 @@ import {
   Tag,
   Trash2,
 } from 'lucide-react-native';
-import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CampoPesos, Hoja, OpcionMenu } from '@/components/hoja';
@@ -52,13 +53,6 @@ export default function FichaArticulo() {
   const [precio, setPrecio] = useState('');
   const [canal, setCanal] = useState<Canal>('en_persona');
   const [fotos, setFotos] = useState<Foto[]>([]);
-  const [subiendo, setSubiendo] = useState(false);
-
-  const cargarFotos = useCallback(async () => {
-    if (sonDeEjemplo || !articulo) return;
-    const r = await api.listarFotos(articulo.id);
-    if (r.ok) setFotos(r.datos.fotos);
-  }, [sonDeEjemplo, articulo]);
 
   useEffect(() => {
     if (sonDeEjemplo || !articulo) return;
@@ -69,7 +63,7 @@ export default function FichaArticulo() {
     return () => {
       vigente = false;
     };
-  }, [sonDeEjemplo, articulo?.id, articulo?.portadaId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sonDeEjemplo, articulo?.id, articulo?.portadaId, articulo?.fotos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!articulo) {
     return (
@@ -117,15 +111,8 @@ export default function FichaArticulo() {
     const opciones: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.7 };
     const r = origen === 'camara' ? await ImagePicker.launchCameraAsync(opciones) : await ImagePicker.launchImageLibraryAsync(opciones);
     if (r.canceled || !r.assets[0]) return;
-    const recurso = r.assets[0];
-    setSubiendo(true);
-    const subida = await api.subirFoto(articulo.id, recurso.uri, recurso.mimeType ?? 'image/jpeg');
-    setSubiendo(false);
-    if (!subida.ok) {
-      setError(subida.error);
-      return;
-    }
-    await Promise.all([cargarFotos(), refrescar(articulo.id)]);
+    // Antes de guardarla se abre en el editor (recortar, girar, quitar fondo).
+    router.push({ pathname: '/editor', params: { operacion: String(articulo.id), uri: r.assets[0].uri } });
   };
 
   const accionFoto = async (accion: 'portada' | 'borrar', foto: Foto) => {
@@ -174,10 +161,9 @@ export default function FichaArticulo() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Agregar foto"
-              disabled={subiendo}
               onPress={() => setHoja('agregarFoto')}
               style={[styles.foto, styles.agregarFoto, { borderColor: theme.borde }]}>
-              {subiendo ? <ActivityIndicator color={theme.primario} /> : <ImagePlus size={IconSize.md} color={theme.textoSecundario} />}
+              <ImagePlus size={IconSize.md} color={theme.textoSecundario} />
             </Pressable>
           </ScrollView>
         ) : null}
@@ -336,6 +322,18 @@ export default function FichaArticulo() {
       <Hoja visible={typeof hoja === 'object' && hoja !== null} titulo="Foto" onCerrar={cerrar}>
         {typeof hoja === 'object' && hoja !== null ? (
           <>
+            <OpcionMenu
+              texto="Editar foto"
+              Icono={Pencil}
+              onPress={() => {
+                const foto = hoja.foto;
+                setHoja(null);
+                router.push({
+                  pathname: '/editor',
+                  params: { operacion: String(articulo.id), foto: String(foto.id), portada: fotos[0]?.id === foto.id ? '1' : '0' },
+                });
+              }}
+            />
             {fotos[0]?.id !== hoja.foto.id ? (
               <OpcionMenu texto="Usar como portada" Icono={Star} onPress={() => accionFoto('portada', hoja.foto)} />
             ) : null}
