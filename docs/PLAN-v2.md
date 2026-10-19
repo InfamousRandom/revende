@@ -58,26 +58,36 @@ pantalla) → Guardado en inventario.
         web actual, el mismo origen (`verificarAcceso` en `worker/util.js`). `GET /api/emparejar`.
   - [x] Bloqueo de 15 minutos tras 5 códigos incorrectos seguidos desde la misma IP.
   - [x] La app pide el código la primera vez y lo guarda cifrado (`expo-secure-store`).
-  - [ ] Publicar el Worker (preguntar antes del push a `main`).
+  - [x] Worker publicado (2026-10-19).
   - [ ] Si el Worker responde 401 en uso normal, volver a la pantalla de emparejar.
 - [ ] Generar el APK.
   - [x] **(Pablo)** Crear cuenta gratis en expo.dev (compila el APK en la nube).
   - [x] Perfil de compilación `apk` en `movil/eas.json`.
-  - [ ] **(Pablo)** `npx eas-cli@latest login` y luego `npx eas-cli@latest build -p android --profile apk`.
+  - [x] **(Pablo)** Primer APK compilado e instalado (2026-10-19); emparejó con su código.
+        Para otro: desde `movil/`, `npx eas-cli@latest build -p android --profile apk`.
 
 Terminado cuando: el APK se instala, se empareja con el código y muestra las 5 secciones en claro y oscuro.
 
 ## Fase V2: inventario e historial
 
-- [ ] Migración `0002`: estado Descartado (`fecha_descartado`) y fotos por operación.
+- [x] Migración `0002`: estado Descartado (`fecha_descartado`) y tabla `fotos` (solo agrega).
+- [x] Worker: columna `situacion` (4 estados; la web sigue con `estado`), `marca`, `portada_id` y
+      `fotos` en cada operación; rutas de fotos en `worker/fotos.js` (subir, ver, portada, borrar);
+      al borrar una operación se borran sus fotos de R2. CSV incluye `fecha_descartado`.
 - [ ] Fotos en Cloudflare R2.
-  - [ ] **(Pablo)** Crear el bucket R2 `revende-fotos` (o `npx wrangler r2 bucket create revende-fotos`).
-- [ ] Inventario con pestañas En inventario / Publicado / Vendido / Descartado, en cuadrícula de 2
-      columnas (foto, nombre, precio de compra).
-- [ ] Ficha del artículo: álbum (portada, reordenar arrastrando, menú por foto) y datos en la misma
-      pantalla, sin abrir una pantalla por campo.
-- [ ] Marcar como publicado, vendido o descartado en uno o dos toques.
-- [ ] Historial y respaldo CSV con lo que ya existe en D1.
+  - [x] Bucket R2 `revende-fotos` creado (2026-10-19) y binding `FOTOS_ARTICULOS` en `wrangler.jsonc`.
+- [x] Inventario con pestañas En inventario / Publicado / Vendido / Descartado, en cuadrícula de 2
+      columnas (foto, nombre, precio de compra), con datos reales de D1 y "jalar para actualizar".
+- [x] Ficha del artículo: fotos (agregar con cámara o galería, portada, borrar) y datos en la misma
+      pantalla. Pendiente: reordenar fotos arrastrando.
+- [x] Marcar como publicado, vendido o descartado en uno o dos toques; deshacer y borrar en el menú.
+- [x] Registrar compra (`movil/src/app/registrar.tsx`): autocompletado con tu catálogo, precio,
+      hoy/ayer/otra fecha y condición; desde el + ("Registrar sin foto"), el botón + del inventario y
+      "Lo compré" del resultado.
+- [x] Historial y estadísticas con datos reales. El respaldo CSV sigue en la web.
+- [x] Si el Worker rechaza el código guardado (401), la app vuelve a pedir emparejar.
+- [ ] Publicar (push a `main`: aplica la migración 0002 en producción) y compilar un APK nuevo
+      (la cámara y la galería de fotos son módulos nativos nuevos).
 
 Terminado cuando: registrar una compra con foto toma menos de 30 segundos y el historial anterior aparece completo.
 

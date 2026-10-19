@@ -71,7 +71,6 @@ function VistaResultado({ consulta }: { consulta?: string }) {
   const r = RESULTADO_EJEMPLO;
   const [venta, setVenta] = useState(String(r.usado.mediana));
   const [ganancia, setGanancia] = useState('800');
-  const [aviso, setAviso] = useState<string | null>(null);
 
   const maximo = (Number(venta) || 0) - (Number(ganancia) || 0);
   const nuevos = r.ofertas.filter((o) => !o.usado);
@@ -142,11 +141,6 @@ function VistaResultado({ consulta }: { consulta?: string }) {
         <ListaOfertas titulo={`Nuevos (${nuevos.length})`} ofertas={nuevos} />
         <ListaOfertas titulo={`Usados y reacondicionados (${usados.length})`} ofertas={usados} />
 
-        {aviso ? (
-          <ThemedText type="chico" themeColor="textoSecundario" style={{ textAlign: 'center' }}>
-            {aviso}
-          </ThemedText>
-        ) : null}
       </ScrollView>
 
       <SafeAreaView edges={['bottom']} style={[styles.acciones, { borderTopColor: theme.borde, backgroundColor: theme.fondo }]}>
@@ -154,7 +148,15 @@ function VistaResultado({ consulta }: { consulta?: string }) {
           <Boton texto={consulta ? 'Buscar otro' : 'Otra foto'} variante="secundario" onPress={() => router.back()} />
         </View>
         <View style={{ flex: 1 }}>
-          <Boton texto="Lo compré" onPress={() => setAviso('«Lo compré» guardará en tu inventario en la Fase V2.')} />
+          <Boton
+            texto="Lo compré"
+            onPress={() =>
+              router.push({
+                pathname: '/registrar',
+                params: { nombre: r.nombre, marca: r.marca, categoria: r.categoria, maximo: String(Math.max(maximo, 0)) },
+              })
+            }
+          />
         </View>
       </SafeAreaView>
     </SafeAreaView>

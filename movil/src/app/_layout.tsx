@@ -12,6 +12,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
 import { Colors } from '@/constants/theme';
+import { ArticulosProvider } from '@/datos/articulos';
 import { EmparejadoProvider, useEmparejado } from '@/datos/emparejado';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -51,7 +52,9 @@ export default function RootLayout() {
     <ThemeProvider value={tema}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <EmparejadoProvider>
-        <Rutas />
+        <ArticulosProvider>
+          <Rutas />
+        </ArticulosProvider>
       </EmparejadoProvider>
     </ThemeProvider>
   );
@@ -70,6 +73,7 @@ function Rutas() {
         <Stack.Screen name="capturar" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
         <Stack.Screen name="resultado" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="articulo/[id]" />
+        <Stack.Screen name="registrar" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
       </Stack.Protected>
       <Stack.Protected guard={!dentro}>
         <Stack.Screen name="emparejar" />

@@ -9,7 +9,7 @@ import { AvisoEjemplo, Tarjeta } from '@/components/ui';
 import { IconSize, Radius, Spacing } from '@/constants/theme';
 import { useArticulos } from '@/datos/articulos';
 import { diasEntre, mesDe, pesos, pesosConSigno } from '@/datos/formato';
-import { NOMBRE_CATEGORIA, estadoDe, gananciaDe, type Categoria } from '@/datos/tipos';
+import { estadoDe, gananciaDe, nombreCategoria } from '@/datos/tipos';
 import { useTheme } from '@/hooks/use-theme';
 
 const HOY = new Date().toISOString().slice(0, 10);
@@ -25,12 +25,15 @@ export default function Estadisticas() {
     const gananciaMes = delMes.reduce((s, a) => s + (gananciaDe(a) ?? 0), 0);
     const invertido = articulos
       .filter((a) => ['inventario', 'publicado'].includes(estadoDe(a)))
-      .reduce((s, a) => s + a.precioCompra, 0);
-    const dias = vendidos.map((a) => diasEntre(a.fechaCompra, a.fechaVenta as string));
+      .reduce((s, a) => s + (a.precioCompra ?? 0), 0);
+    const dias = vendidos.filter((a) => a.fechaCompra).map((a) => diasEntre(a.fechaCompra as string, a.fechaVenta as string));
     const diasPromedio = dias.length ? Math.round(dias.reduce((s, d) => s + d, 0) / dias.length) : null;
 
-    const porCategoria = new Map<Categoria, number>();
-    for (const a of vendidos) porCategoria.set(a.categoria, (porCategoria.get(a.categoria) ?? 0) + (gananciaDe(a) ?? 0));
+    const porCategoria = new Map<string | null, number>();
+    for (const a of vendidos) {
+      const g = gananciaDe(a);
+      if (g != null) porCategoria.set(a.categoria, (porCategoria.get(a.categoria) ?? 0) + g);
+    }
     const categorias = [...porCategoria].sort((x, y) => y[1] - x[1]);
 
     return { gananciaMes, vendidosMes: delMes.length, invertido, diasPromedio, categorias, hayVentas: vendidos.length > 0 };
@@ -79,9 +82,9 @@ export default function Estadisticas() {
             <ThemedText type="cuerpoFuerte">Ganancia por categoría</ThemedText>
           </View>
           {datos.categorias.map(([categoria, ganancia]) => (
-            <View key={categoria} style={styles.categoria}>
+            <View key={categoria ?? 'sin'} style={styles.categoria}>
               <View style={styles.filaCategoria}>
-                <ThemedText>{NOMBRE_CATEGORIA[categoria]}</ThemedText>
+                <ThemedText>{nombreCategoria(categoria)}</ThemedText>
                 <ThemedText type="cuerpoFuerte" style={{ color: ganancia >= 0 ? theme.dinero : theme.peligro }}>
                   {pesosConSigno(ganancia)}
                 </ThemedText>

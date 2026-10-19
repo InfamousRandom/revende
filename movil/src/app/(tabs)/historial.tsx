@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { ReceiptText } from 'lucide-react-native';
 import { useMemo } from 'react';
-import { Pressable, SectionList, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 
 import { Pantalla } from '@/components/pantalla';
 import { PantallaVacia } from '@/components/pantalla-vacia';
@@ -16,12 +16,15 @@ import { useTheme } from '@/hooks/use-theme';
 type Movimiento = { clave: string; tipo: 'compra' | 'venta'; fecha: string; monto: number; articulo: Articulo };
 
 export default function Historial() {
-  const { articulos, sonDeEjemplo } = useArticulos();
+  const { articulos, sonDeEjemplo, cargando, recargar } = useArticulos();
+  const theme = useTheme();
 
   const secciones = useMemo(() => {
     const movimientos: Movimiento[] = [];
     for (const a of articulos) {
-      movimientos.push({ clave: `c${a.id}`, tipo: 'compra', fecha: a.fechaCompra, monto: a.precioCompra, articulo: a });
+      if (a.precioCompra != null && a.fechaCompra) {
+        movimientos.push({ clave: `c${a.id}`, tipo: 'compra', fecha: a.fechaCompra, monto: a.precioCompra, articulo: a });
+      }
       if (a.precioVenta != null && a.fechaVenta) {
         movimientos.push({ clave: `v${a.id}`, tipo: 'venta', fecha: a.fechaVenta, monto: a.precioVenta, articulo: a });
       }
@@ -54,6 +57,9 @@ export default function Historial() {
         sections={secciones}
         keyExtractor={(m) => m.clave}
         stickySectionHeadersEnabled={false}
+        refreshControl={
+          sonDeEjemplo ? undefined : <RefreshControl refreshing={cargando} onRefresh={recargar} tintColor={theme.primario} />
+        }
         contentContainerStyle={styles.lista}
         renderSectionHeader={({ section }) => (
           <ThemedText type="cuerpoFuerte" themeColor="textoSecundario" style={styles.mes}>
@@ -79,7 +85,7 @@ function FilaMovimiento({ movimiento: m }: { movimiento: Movimiento }) {
       accessibilityLabel={`${venta ? 'Venta' : 'Compra'} de ${m.articulo.nombre}, ${pesos(m.monto)}`}
       onPress={() => router.push({ pathname: '/articulo/[id]', params: { id: String(m.articulo.id) } })}
       style={({ pressed }) => [styles.fila, { opacity: pressed ? 0.7 : 1 }]}>
-      <Miniatura categoria={m.articulo.categoria} tamano="chica" />
+      <Miniatura categoria={m.articulo.categoria} portadaId={m.articulo.portadaId} tamano="chica" />
       <View style={styles.textos}>
         <ThemedText type="cuerpoFuerte" numberOfLines={1}>
           {m.articulo.nombre}

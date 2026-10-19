@@ -1,4 +1,5 @@
 /** Piezas reutilizables de la interfaz: miniatura, píldoras, tarjeta, botones y avisos. */
+import { Image } from 'expo-image';
 import {
   Disc3,
   FlaskConical,
@@ -6,6 +7,7 @@ import {
   Gamepad2,
   Headphones,
   Layers,
+  Package,
   Shirt,
   ToyBrick,
   type LucideIcon,
@@ -14,36 +16,56 @@ import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
-import type { Categoria, Estado } from '@/datos/tipos';
+import { fuenteFoto } from '@/datos/api';
+import { useEmparejado } from '@/datos/emparejado';
+import type { Estado } from '@/datos/tipos';
 import { NOMBRE_ESTADO } from '@/datos/tipos';
 import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
-const ICONO_CATEGORIA: Record<Categoria, LucideIcon> = {
-  consolas: Gamepad2,
-  videojuegos: Disc3,
-  ropa: Shirt,
-  tenis: Footprints,
-  electronica: Headphones,
-  juguetes: ToyBrick,
-  cartas: Layers,
-};
+// Ícono según palabras de la categoría (texto libre en D1). Sin coincidencia: una caja.
+function IconoCategoria({ categoria, size, color }: { categoria: string | null; size: number; color: string }) {
+  const c = categoria ?? '';
+  const p = { size, color, strokeWidth: 1.5 };
+  if (/consol/.test(c)) return <Gamepad2 {...p} />;
+  if (/juego|disco/.test(c)) return <Disc3 {...p} />;
+  if (/ropa|chamarra|playera|camisa|pantal/.test(c)) return <Shirt {...p} />;
+  if (/tenis|zapat|calzado/.test(c)) return <Footprints {...p} />;
+  if (/electr|audio|audifon|celular|telefon|computa/.test(c)) return <Headphones {...p} />;
+  if (/juguet|lego|figura/.test(c)) return <ToyBrick {...p} />;
+  if (/carta|pokemon|tcg/.test(c)) return <Layers {...p} />;
+  return <Package {...p} />;
+}
 
-/** Lugar de la foto. Mientras no hay fotos reales, muestra el ícono de la categoría. */
-export function Miniatura({ categoria, tamano = 'grande' }: { categoria: Categoria; tamano?: 'grande' | 'chica' }) {
+/** Foto de portada del artículo; si no tiene, el ícono de su categoría. */
+export function Miniatura({
+  categoria,
+  portadaId = null,
+  tamano = 'grande',
+}: {
+  categoria: string | null;
+  portadaId?: number | null;
+  tamano?: 'grande' | 'chica';
+}) {
   const theme = useTheme();
-  const Icono = ICONO_CATEGORIA[categoria];
+  const { codigo } = useEmparejado();
   const chica = tamano === 'chica';
+  const estilo = [chica ? styles.miniaturaChica : styles.miniaturaGrande, { backgroundColor: theme.superficieAlta }];
 
+  if (portadaId != null) {
+    return (
+      <Image
+        source={fuenteFoto(portadaId, codigo)}
+        style={estilo}
+        contentFit="cover"
+        transition={150}
+        accessibilityIgnoresInvertColors
+      />
+    );
+  }
   return (
-    <View
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={[
-        chica ? styles.miniaturaChica : styles.miniaturaGrande,
-        { backgroundColor: theme.superficieAlta },
-      ]}>
-      <Icono size={chica ? IconSize.md : 40} color={theme.textoTenue} strokeWidth={1.5} />
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={estilo}>
+      <IconoCategoria categoria={categoria} size={chica ? IconSize.md : 40} color={theme.textoTenue} />
     </View>
   );
 }
@@ -64,6 +86,7 @@ export function Pildora({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={cuenta != null ? `${texto}, ${cuenta}` : texto}
       aria-selected={activa}
       onPress={onPress}
       style={({ pressed }) => [
@@ -101,6 +124,7 @@ export function Boton({
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityLabel={texto}
       onPress={onPress}
       style={({ pressed }) => [
         styles.boton,

@@ -1,13 +1,13 @@
 import { router } from 'expo-router';
-import { Package } from 'lucide-react-native';
+import { Package, Plus } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Pantalla } from '@/components/pantalla';
 import { PantallaVacia } from '@/components/pantalla-vacia';
 import { ThemedText } from '@/components/themed-text';
-import { AvisoEjemplo, EtiquetaEstado, Miniatura, Pildora } from '@/components/ui';
-import { Spacing } from '@/constants/theme';
+import { AvisoEjemplo, Boton, EtiquetaEstado, Miniatura, Pildora } from '@/components/ui';
+import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import { useArticulos } from '@/datos/articulos';
 import { pesos, pesosConSigno } from '@/datos/formato';
 import { NOMBRE_CONDICION, NOMBRE_ESTADO, estadoDe, gananciaDe, type Articulo, type Estado } from '@/datos/tipos';
@@ -16,7 +16,7 @@ import { useTheme } from '@/hooks/use-theme';
 const ESTADOS: Estado[] = ['inventario', 'publicado', 'vendido', 'descartado'];
 
 export default function Inventario() {
-  const { articulos, sonDeEjemplo } = useArticulos();
+  const { articulos, sonDeEjemplo, cargando, error, recargar } = useArticulos();
   const [estado, setEstado] = useState<Estado>('inventario');
   const theme = useTheme();
 
@@ -26,12 +26,42 @@ export default function Inventario() {
     return grupos;
   }, [articulos]);
 
-  const invertido = [...porEstado.inventario, ...porEstado.publicado].reduce((s, a) => s + a.precioCompra, 0);
+  const sinVender = [...porEstado.inventario, ...porEstado.publicado];
+  const invertido = sinVender.reduce((s, a) => s + (a.precioCompra ?? 0), 0);
   const visibles = porEstado[estado];
+
+  const botonRegistrar = (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Registrar una compra"
+      onPress={() => router.push('/registrar')}
+      style={({ pressed }) => [styles.registrar, { backgroundColor: theme.superficie, opacity: pressed ? 0.6 : 1 }]}>
+      <Plus size={IconSize.md} color={theme.texto} />
+    </Pressable>
+  );
+
+  if (cargando && !articulos.length) {
+    return (
+      <Pantalla titulo="Inventario" accion={botonRegistrar}>
+        <ActivityIndicator color={theme.primario} style={{ marginTop: Spacing.xxxl }} />
+      </Pantalla>
+    );
+  }
+
+  if (error && !articulos.length) {
+    return (
+      <Pantalla titulo="Inventario" accion={botonRegistrar}>
+        <PantallaVacia Icono={Package} titulo="No se pudo cargar tu inventario" texto={error} />
+        <View style={styles.reintentar}>
+          <Boton texto="Reintentar" onPress={recargar} />
+        </View>
+      </Pantalla>
+    );
+  }
 
   if (articulos.length === 0) {
     return (
-      <Pantalla titulo="Inventario">
+      <Pantalla titulo="Inventario" accion={botonRegistrar}>
         <PantallaVacia
           Icono={Package}
           titulo="Todavía no tienes artículos"
@@ -42,16 +72,14 @@ export default function Inventario() {
   }
 
   return (
-    <Pantalla titulo="Inventario">
+    <Pantalla titulo="Inventario" accion={botonRegistrar}>
       {sonDeEjemplo ? <AvisoEjemplo /> : null}
 
       <View style={styles.resumen}>
         <ThemedText themeColor="textoSecundario">Tienes invertido</ThemedText>
-        <ThemedText type="subtitulo" style={{ color: theme.texto }}>
-          {pesos(invertido)}
-        </ThemedText>
+        <ThemedText type="subtitulo">{pesos(invertido)}</ThemedText>
         <ThemedText type="chico" themeColor="textoTenue">
-          en {porEstado.inventario.length + porEstado.publicado.length} artículos sin vender
+          en {sinVender.length} {sinVender.length === 1 ? 'artículo' : 'artículos'} sin vender
         </ThemedText>
       </View>
 
@@ -75,6 +103,9 @@ export default function Inventario() {
         numColumns={2}
         columnWrapperStyle={styles.fila}
         contentContainerStyle={styles.lista}
+        refreshControl={
+          sonDeEjemplo ? undefined : <RefreshControl refreshing={cargando} onRefresh={recargar} tintColor={theme.primario} />
+        }
         renderItem={({ item }) => <TarjetaArticulo articulo={item} />}
         ListEmptyComponent={
           <ThemedText themeColor="textoSecundario" style={styles.vacio}>
@@ -97,24 +128,28 @@ function TarjetaArticulo({ articulo }: { articulo: Articulo }) {
       accessibilityLabel={`${articulo.nombre}, ${NOMBRE_ESTADO[estado]}`}
       onPress={() => router.push({ pathname: '/articulo/[id]', params: { id: String(articulo.id) } })}
       style={({ pressed }) => [styles.tarjeta, { opacity: pressed ? 0.75 : 1 }]}>
-      <Miniatura categoria={articulo.categoria} />
+      <Miniatura categoria={articulo.categoria} portadaId={articulo.portadaId} />
       <View style={styles.textos}>
         <ThemedText type="cuerpoFuerte" numberOfLines={2}>
           {articulo.nombre}
         </ThemedText>
-        <ThemedText type="chico" themeColor="textoTenue" numberOfLines={1}>
-          {NOMBRE_CONDICION[articulo.condicion]}
-        </ThemedText>
-        {estado === 'vendido' && ganancia != null ? (
+        {articulo.condicion ? (
+          <ThemedText type="chico" themeColor="textoTenue" numberOfLines={1}>
+            {NOMBRE_CONDICION[articulo.condicion]}
+          </ThemedText>
+        ) : null}
+        {estado === 'vendido' ? (
           <>
             <ThemedText type="precio">{pesos(articulo.precioVenta ?? 0)}</ThemedText>
-            <ThemedText type="chico" style={{ color: ganancia >= 0 ? theme.dinero : theme.peligro }}>
-              {pesosConSigno(ganancia)} de ganancia
-            </ThemedText>
+            {ganancia != null ? (
+              <ThemedText type="chico" style={{ color: ganancia >= 0 ? theme.dinero : theme.peligro }}>
+                {pesosConSigno(ganancia)} de ganancia
+              </ThemedText>
+            ) : null}
           </>
         ) : (
           <>
-            <ThemedText type="precio">{pesos(articulo.precioCompra)}</ThemedText>
+            <ThemedText type="precio">{articulo.precioCompra != null ? pesos(articulo.precioCompra) : '—'}</ThemedText>
             <ThemedText type="chico" themeColor="textoTenue">
               {estado === 'publicado' && articulo.precioPublicado
                 ? `Publicado en ${pesos(articulo.precioPublicado)}`
@@ -129,6 +164,16 @@ function TarjetaArticulo({ articulo }: { articulo: Articulo }) {
 }
 
 const styles = StyleSheet.create({
+  registrar: {
+    width: TocableMinimo,
+    height: TocableMinimo,
+    borderRadius: Radius.pildora,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  reintentar: {
+    padding: Spacing.lg,
+  },
   resumen: {
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,

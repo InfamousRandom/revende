@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Camera, FlaskConical, X } from 'lucide-react-native';
+import { Camera, FlaskConical, PencilLine, X } from 'lucide-react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -30,11 +30,12 @@ export default function Capturar() {
         titulo="Aquí va la cámara"
         texto="Tómale foto a un artículo y te diremos qué es y cuánto vale. Llega en la Fase V3."
       />
-      {USAR_DATOS_DE_EJEMPLO ? (
-        <View style={styles.simular}>
+      <View style={styles.simular}>
+        <Boton texto="Registrar sin foto" variante="secundario" Icono={PencilLine} onPress={() => router.replace('/registrar')} />
+        {USAR_DATOS_DE_EJEMPLO ? (
           <Boton texto="Simular un escaneo (ejemplo)" Icono={FlaskConical} onPress={() => router.push('/resultado')} />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
     </SafeAreaView>
   );
 }
@@ -49,6 +50,7 @@ const styles = StyleSheet.create({
   },
   simular: {
     padding: Spacing.lg,
+    gap: Spacing.md,
   },
   cerrar: {
     width: TocableMinimo,
