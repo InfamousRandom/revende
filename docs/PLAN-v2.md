@@ -113,7 +113,7 @@ Terminado cuando: registrar una compra con foto toma menos de 30 segundos y el h
 - [x] Resultado: sugerencia con origen, marca y año discreto, alternativas, precios nuevos y usados
       con tienda y link, tus ventas, Mercado Libre, Lens, calculadora sin gastos y "Lo compré"
       (la foto del escaneo se guarda como portada).
-- [ ] Capturas manuales de precio de usado en la app nativa (hoy siguen en la web).
+- [x] Capturas manuales de precio de usado en la app nativa (ver Fase V8b).
 
 ## Fase V4: editor de fotos
 
@@ -143,6 +143,27 @@ Terminado cuando: registrar una compra con foto toma menos de 30 segundos y el h
 - [x] Interruptor `FUNCIONES` en `movil/src/constants/funciones.ts`, apagado.
 - [x] "¿Es original?" (`POST /api/autenticidad`) e Insight (`POST /api/insight`, con fuentes).
 - [ ] Activarlas cuando haya saldo en Gemini (hoy responde 402).
+
+## Fase V8b: decidir y vender mejor (2026-10-20)
+
+Sale de la comparación con otras apps de reventa (Flippd, Underpriced, Pocket Pricer, CollX). En el
+orden que eligió Pablo:
+
+- [x] Veredicto "Cómpralo / Regatea / No lo compres" en el resultado, con lo que piden
+      (`datos/decision.ts`). El precio que piden pasa como precio de compra al registrar.
+- [x] Precios que viste publicados (Marketplace, Mercado Libre, otro) anotados en el resultado:
+      `POST /api/capturas`. Cuentan para la calculadora después de tus ventas y antes de Google.
+      "Tus ventas" ya no mezcla las capturas.
+- [x] Crear anuncio desde la ficha: título y descripción editables y compartir el texto (las fotos se
+      agregan aparte; compartir imágenes necesitaría `expo-sharing`).
+- [x] Historial de precios: cada búsqueda nueva de Google Shopping guarda su mediana del día en D1
+      (`precios_vistos`, migración 0003) y el resultado muestra si subió o bajó.
+- [x] Valor del inventario hoy (`GET /api/valor-inventario`): precio publicado o última mediana de
+      usados buscada; sin dato no se estima. En Inicio y en la ficha.
+- [x] Inventario estancado: más del doble de tus días típicos de venta (o 30 días). Aviso en Inicio
+      y en la ficha.
+- [x] Lote comprado: "Compré el lote" registra cada artículo con su parte de lo pagado (según lo que
+      vale cada uno; si falta algún precio, en partes iguales).
 
 ## Fase V9: versión web
 

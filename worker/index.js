@@ -300,7 +300,7 @@ async function precios(request, env) {
   const claveCache = `${VERSION_CACHE}:${normalizar(consulta)}`;
   if (env.CACHE) {
     const guardado = await env.CACHE.get(claveCache, 'json');
-    if (guardado) return json({ ...guardado, cache: true });
+    if (guardado) return json({ ...guardado, historial: await historialDePrecios(env, consulta), cache: true });
   }
 
   const { status, datos } = await buscarSerpApi(consulta, env);
@@ -350,7 +350,39 @@ async function precios(request, env) {
     fecha: new Date().toISOString(),
   };
   if (env.CACHE) await env.CACHE.put(claveCache, JSON.stringify(respuesta), { expirationTtl: CACHE_SEGUNDOS });
-  return json({ ...respuesta, cache: false });
+  await guardarPrecioVisto(env, consulta, nuevos.rango?.mediana, usados.rango?.mediana);
+  return json({ ...respuesta, historial: await historialDePrecios(env, consulta), cache: false });
+}
+
+// ---------- Historial de precios (D1 `precios_vistos`) ----------
+// Cada búsqueda nueva guarda su mediana del día; así se ve si el precio sube o baja sin gastar más.
+// Si D1 falla, los precios se muestran igual.
+
+const hoyMexico = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
+
+async function guardarPrecioVisto(env, consulta, nuevo, usado) {
+  if (!env.DB || (!nuevo && !usado)) return;
+  try {
+    await env.DB.prepare('INSERT OR REPLACE INTO precios_vistos (consulta, fecha, nuevo, usado) VALUES (?, ?, ?, ?)')
+      .bind(normalizar(consulta), hoyMexico(), nuevo ? Math.round(nuevo) : null, usado ? Math.round(usado) : null)
+      .run();
+  } catch (e) {
+    console.error('precios_vistos', String(e));
+  }
+}
+
+async function historialDePrecios(env, consulta) {
+  if (!env.DB) return [];
+  try {
+    const { results } = await env.DB.prepare(
+      'SELECT fecha, nuevo, usado FROM precios_vistos WHERE consulta = ? ORDER BY fecha DESC LIMIT 12',
+    )
+      .bind(normalizar(consulta))
+      .all();
+    return results;
+  } catch {
+    return [];
+  }
 }
 
 // ---------- /api/identificar: nombre del articulo a partir de una foto (SerpApi + Google Lens) ----------

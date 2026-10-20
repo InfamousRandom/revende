@@ -153,7 +153,18 @@ export type OfertaApi = {
   aviso?: string;
 };
 type Resumen = { rango: { min: number; mediana: number; max: number } | null; ofertas: OfertaApi[] };
-export type PreciosApi = { consulta: string; producto: string; imagen: string | null; nuevos: Resumen; usados: Resumen; total: number; cache: boolean };
+/** Mediana de nuevos y usados de búsquedas anteriores de la misma consulta (una por día, la más reciente primero). */
+export type PrecioVisto = { fecha: string; nuevo: number | null; usado: number | null };
+export type PreciosApi = {
+  consulta: string;
+  producto: string;
+  imagen: string | null;
+  nuevos: Resumen;
+  usados: Resumen;
+  total: number;
+  cache: boolean;
+  historial?: PrecioVisto[];
+};
 
 /** Google Shopping vía SerpApi: gasta 1 búsqueda si no está en la memoria de 24 h. */
 export function buscarPrecios(consulta: string) {
@@ -201,8 +212,18 @@ export async function identificarFoto(uri: string) {
   });
 }
 
+export type CapturaApi = {
+  id: number;
+  precio: number;
+  fecha: string;
+  fuente: 'marketplace' | 'ml_usado' | 'otro';
+  condicion: string | null;
+  url: string | null;
+};
+
 export type ReferenciasApi = {
   producto: { id: number; nombre: string } | null;
+  capturas?: CapturaApi[];
   resumen?: {
     ventas: { n: number; mediana: number; min: number; max: number } | null;
     capturas: { n: number; mediana: number; min: number; max: number } | null;
@@ -215,6 +236,18 @@ export type ReferenciasApi = {
 export function buscarReferencias(q: string, precioNuevo?: number) {
   const extra = precioNuevo ? `&precio_nuevo=${precioNuevo}` : '';
   return llamar<ReferenciasApi>(`/api/referencias?q=${encodeURIComponent(q)}${extra}`);
+}
+
+/** Precio de usado que viste publicado (Marketplace, Mercado Libre, etc.). */
+export function crearCaptura(datos: { producto_id: number; precio: number; fuente: CapturaApi['fuente']; condicion?: string | null }) {
+  return llamar<{ captura: CapturaApi }>('/api/capturas', conJson('POST', datos));
+}
+
+export type ValorArticuloApi = { id: number; precio: number | null; fuente: 'publicado' | 'google' | null; fecha: string | null };
+
+/** Lo que vale hoy cada artículo sin vender: precio publicado o última mediana de usados (gratis). */
+export function valorInventario() {
+  return llamar<{ articulos: ValorArticuloApi[] }>('/api/valor-inventario');
 }
 
 /** Búsquedas de SerpApi que quedan este mes. */

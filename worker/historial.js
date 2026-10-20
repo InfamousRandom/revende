@@ -10,7 +10,7 @@ const MAX_TEXTO = 120;
 const MAX_NOTAS = 1000;
 const MAX_PESOS = 10_000_000;
 
-export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas|exportar|importar|fotos)(\/|$)/.test(ruta);
+export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas|exportar|importar|fotos|valor-inventario)(\/|$)/.test(ruta);
 
 const FUENTES = ['marketplace', 'ml_usado', 'otro'];
 
@@ -489,6 +489,37 @@ async function crearCaptura(request, env) {
   return json({ ok: true, captura: guardada }, 201);
 }
 
+// ---------- Valor de lo que tengo sin vender ----------
+// Por artículo: el precio en que lo publicaste; si no, la última mediana de usados que salió al
+// buscarlo en Google Shopping (precios_vistos). Sin ninguno de los dos, queda sin valor: no se estima.
+
+async function valorInventario(env) {
+  const { results: ops } = await env.DB.prepare(
+    `SELECT o.id, o.precio_publicado, p.nombre FROM operaciones o JOIN productos p ON p.id = o.producto_id
+     WHERE o.fecha_venta IS NULL AND o.fecha_descartado IS NULL`,
+  ).all();
+  const consultas = [...new Set(ops.filter((o) => !o.precio_publicado).map((o) => normalizar(o.nombre)))];
+  const vistos = new Map();
+  // De a 50 para no pasar el límite de parámetros de D1.
+  for (let i = 0; i < consultas.length; i += 50) {
+    const grupo = consultas.slice(i, i + 50);
+    const { results } = await env.DB.prepare(
+      `SELECT consulta, fecha, usado FROM precios_vistos
+       WHERE usado IS NOT NULL AND consulta IN (${grupo.map(() => '?').join(',')})
+       ORDER BY fecha DESC`,
+    )
+      .bind(...grupo)
+      .all();
+    for (const r of results) if (!vistos.has(r.consulta)) vistos.set(r.consulta, r);
+  }
+  const articulos = ops.map((o) => {
+    if (o.precio_publicado) return { id: o.id, precio: o.precio_publicado, fuente: 'publicado', fecha: null };
+    const v = vistos.get(normalizar(o.nombre));
+    return v ? { id: o.id, precio: v.usado, fuente: 'google', fecha: v.fecha } : { id: o.id, precio: null, fuente: null, fecha: null };
+  });
+  return json({ ok: true, articulos });
+}
+
 // Si una venta no trae precio nuevo de referencia, usa el último recordado para ese producto.
 async function agregarPrecioNuevo(env, o) {
   if (o.precio_venta == null || o.precio_nuevo_ref != null || !env.CACHE) return o;
@@ -699,6 +730,7 @@ export async function historial(request, env, url) {
     }
     if (ruta === '/api/referencias' && metodo === 'GET') return await referencias(env, url);
     if (ruta === '/api/capturas' && metodo === 'POST') return await crearCaptura(request, env);
+    if (ruta === '/api/valor-inventario' && metodo === 'GET') return await valorInventario(env);
     if (ruta === '/api/exportar' && metodo === 'GET') return await exportar(env);
     if (ruta === '/api/importar' && metodo === 'POST') return await importar(request, env, url);
     const unaOperacion = /^\/api\/operaciones\/(\d+)$/.exec(ruta);

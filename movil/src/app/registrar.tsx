@@ -29,7 +29,7 @@ function ayer(): string {
  * la fecha es hoy y la condición tiene un valor por defecto.
  */
 export default function Registrar() {
-  const params = useLocalSearchParams<{ nombre?: string; marca?: string; categoria?: string; maximo?: string; foto?: string; extra?: string }>();
+  const params = useLocalSearchParams<{ nombre?: string; marca?: string; categoria?: string; maximo?: string; precio?: string; foto?: string; extra?: string }>();
   const { articulos, sonDeEjemplo, registrarCompra, refrescar } = useArticulos();
   const theme = useTheme();
 
@@ -38,7 +38,7 @@ export default function Registrar() {
   const [sugerencias, setSugerencias] = useState<Producto[]>([]);
   const [marca, setMarca] = useState(params.marca ?? '');
   const [categoria, setCategoria] = useState(params.categoria ?? '');
-  const [precio, setPrecio] = useState('');
+  const [precio, setPrecio] = useState(params.precio ?? '');
   const [cuando, setCuando] = useState<Cuando>('hoy');
   const [otraFecha, setOtraFecha] = useState(hoy());
   const [condicion, setCondicion] = useState<Condicion>('usado_bueno');

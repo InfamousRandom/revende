@@ -1,21 +1,25 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calculator, ExternalLink, Globe, History, Search, X } from 'lucide-react-native';
+import { Calculator, ExternalLink, Globe, History, Search, Store, TrendingDown, TrendingUp, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CampoBusqueda } from '@/components/campo-busqueda';
+import { CampoPesos, Hoja } from '@/components/hoja';
 import { TarjetaAutenticidad, TarjetaInsight } from '@/components/ia';
 import { PantallaVacia } from '@/components/pantalla-vacia';
 import { ThemedText } from '@/components/themed-text';
 import { AvisoEjemplo, Boton, Destacado, Miniatura, Pildora, Tarjeta } from '@/components/ui';
 import { FUNCIONES } from '@/constants/funciones';
 import { Fonts, IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
-import type { OfertaApi } from '@/datos/api';
+import * as api from '@/datos/api';
+import type { CapturaApi, OfertaApi } from '@/datos/api';
 import { useArticulos } from '@/datos/articulos';
 import { PASOS, useBusqueda, type Entrada, type Resultado as DatosResultado } from '@/datos/busqueda';
-import { pesos } from '@/datos/formato';
+import { precioDeReventa, veredicto, type Veredicto } from '@/datos/decision';
+import { fechaCorta, pesos } from '@/datos/formato';
+import { NOMBRE_CONDICION, type Condicion } from '@/datos/tipos';
 import { useTheme } from '@/hooks/use-theme';
 
 const VISIBLES = 6;
@@ -116,17 +120,18 @@ function VistaResultado({ r, entrada, extra }: { r: DatosResultado; entrada: Ent
   const theme = useTheme();
   const { sonDeEjemplo } = useArticulos();
 
-  // Precio de venta para la calculadora: tus ventas primero; si no, la mediana de usados.
-  const ventaSugerida = r.tusVentas?.rango.mediana ?? r.usados?.rango?.mediana ?? null;
-  const [venta, setVenta] = useState(ventaSugerida ? String(Math.round(ventaSugerida)) : '');
-  const [ganancia, setGanancia] = useState('800');
-  const maximo = (Number(venta) || 0) - (Number(ganancia) || 0);
+  // Lo que viste publicado se puede agregar aquí mismo y cuenta para la calculadora.
+  const [capturas, setCapturas] = useState<CapturaApi[]>(r.capturas);
+  const [producto, setProducto] = useState(r.producto);
 
-  const fuenteVenta = useMemo(() => {
-    if (r.tusVentas) return `Mediana de tus ${r.tusVentas.rango.n} ventas`;
-    if (r.usados?.rango) return 'Mediana de usados en Google Shopping';
-    return 'Escribe en cuánto lo venderías';
-  }, [r]);
+  // Precio de venta para la calculadora: tus ventas, lo que viste publicado o usados en Google.
+  const reventa = useMemo(() => precioDeReventa({ ...r, capturas }), [r, capturas]);
+  const [venta, setVenta] = useState(reventa ? String(reventa.precio) : '');
+  const [ganancia, setGanancia] = useState('800');
+  const [piden, setPiden] = useState('');
+  const maximo = (Number(venta) || 0) - (Number(ganancia) || 0);
+  const decision = veredicto(Number(venta) || 0, maximo, Number(piden) || 0);
+  const fuenteVenta = reventa && String(reventa.precio) === venta ? reventa.fuente : 'Escribe en cuánto lo venderías';
 
   const comprar = () =>
     router.push({
@@ -135,6 +140,7 @@ function VistaResultado({ r, entrada, extra }: { r: DatosResultado; entrada: Ent
         nombre: r.nombre,
         marca: r.marca ?? '',
         maximo: String(Math.max(maximo, 0)),
+        precio: piden,
         foto: r.foto ?? '',
         extra: extra ?? '',
       },
@@ -261,7 +267,28 @@ function VistaResultado({ r, entrada, extra }: { r: DatosResultado; entrada: Ent
               {Number(venta) > 0 ? (maximo > 0 ? pesos(maximo) : 'No conviene') : '—'}
             </ThemedText>
           </View>
+          <Campo etiqueta="¿Cuánto piden?" valor={piden} onCambio={setPiden} ayuda="Escríbelo y te digo si conviene" />
+          {decision ? <TarjetaVeredicto v={decision} /> : null}
         </Tarjeta>
+
+        <SeccionCapturas
+          nombre={r.nombre}
+          marca={r.marca}
+          capturas={capturas}
+          producto={producto}
+          deEjemplo={sonDeEjemplo}
+          onGuardada={(c, p) => {
+            setCapturas((lista) => [c, ...lista]);
+            setProducto(p);
+            // Si la calculadora no tenía precio de tus ventas, se actualiza con la nueva mediana.
+            if (!r.tusVentas) {
+              const nueva = precioDeReventa({ ...r, capturas: [c, ...capturas] });
+              if (nueva) setVenta(String(nueva.precio));
+            }
+          }}
+        />
+
+        {r.historial.length > 1 ? <SeccionHistorial historial={r.historial} /> : null}
 
         {r.ebay ? <SeccionEbay ebay={r.ebay} /> : null}
 
@@ -281,6 +308,181 @@ function VistaResultado({ r, entrada, extra }: { r: DatosResultado; entrada: Ent
         </View>
       </SafeAreaView>
     </SafeAreaView>
+  );
+}
+
+function TarjetaVeredicto({ v }: { v: Veredicto }) {
+  const theme = useTheme();
+  const fondo = v.tipo === 'compra' ? theme.dinero : v.tipo === 'regatea' ? theme.destacado : theme.peligro;
+  const color = v.tipo === 'compra' ? theme.sobreDinero : v.tipo === 'regatea' ? theme.sobreDestacado : theme.fondo;
+  return (
+    <View accessibilityRole="summary" aria-live="polite" style={[styles.maximo, { backgroundColor: fondo }]}>
+      <ThemedText type="titulo" style={{ color }}>
+        {v.titulo}
+      </ThemedText>
+      <ThemedText type="cuerpoFuerte" style={{ color }}>
+        {v.detalle}
+      </ThemedText>
+    </View>
+  );
+}
+
+const FUENTES: { valor: CapturaApi['fuente']; texto: string }[] = [
+  { valor: 'marketplace', texto: 'Marketplace' },
+  { valor: 'ml_usado', texto: 'Mercado Libre' },
+  { valor: 'otro', texto: 'Otro' },
+];
+const CONDICIONES: Condicion[] = ['sellado', 'como_nuevo', 'usado_bueno', 'con_detalles'];
+const nombreFuente = (f: CapturaApi['fuente']) => FUENTES.find((x) => x.valor === f)?.texto ?? 'Otro';
+
+/** Precios de usado que viste publicados (Marketplace, etc.): se anotan a mano, nunca automático. */
+function SeccionCapturas({
+  nombre,
+  marca,
+  capturas,
+  producto,
+  deEjemplo,
+  onGuardada,
+}: {
+  nombre: string;
+  marca: string | null;
+  capturas: CapturaApi[];
+  producto: { id: number; nombre: string } | null;
+  deEjemplo: boolean;
+  onGuardada: (c: CapturaApi, producto: { id: number; nombre: string } | null) => void;
+}) {
+  const theme = useTheme();
+  const [abierta, setAbierta] = useState(false);
+  const [precio, setPrecio] = useState('');
+  const [fuente, setFuente] = useState<CapturaApi['fuente']>('marketplace');
+  const [condicion, setCondicion] = useState<Condicion | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const precios = capturas.map((c) => c.precio).sort((a, b) => a - b);
+
+  const guardar = async () => {
+    if (!(Number(precio) > 0)) return setError('Escribe el precio que viste.');
+    setGuardando(true);
+    setError(null);
+    const hoy = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Mexico_City' }).format(new Date());
+    if (deEjemplo) {
+      onGuardada({ id: Date.now(), precio: Number(precio), fecha: hoy, fuente, condicion, url: null }, producto);
+    } else {
+      // El precio se liga a tu catálogo: si el artículo aún no está, se agrega con este nombre.
+      let p = producto;
+      if (!p) {
+        const creado = await api.crearProducto({ nombre, marca });
+        if (!creado.ok) {
+          setGuardando(false);
+          return setError(creado.error);
+        }
+        p = { id: creado.datos.producto.id, nombre: creado.datos.producto.nombre };
+      }
+      const r = await api.crearCaptura({ producto_id: p.id, precio: Number(precio), fuente, condicion });
+      if (!r.ok) {
+        setGuardando(false);
+        return setError(r.error);
+      }
+      onGuardada(r.datos.captura, p);
+    }
+    setGuardando(false);
+    setPrecio('');
+    setAbierta(false);
+  };
+
+  return (
+    <Tarjeta style={{ gap: Spacing.sm }}>
+      <View style={styles.tituloSeccion}>
+        <Store size={IconSize.sm} color={theme.textoSecundario} />
+        <ThemedText type="cuerpoFuerte" style={{ flex: 1 }}>
+          Precios que viste publicados
+        </ThemedText>
+      </View>
+      {precios.length ? (
+        <>
+          <ThemedText type="subtitulo">{pesos(precios[Math.floor(precios.length / 2)])}</ThemedText>
+          <ThemedText type="chico" themeColor="textoTenue">
+            {precios.length} {precios.length === 1 ? 'precio' : 'precios'}
+            {precios.length > 1 ? ` · ${pesos(precios[0])} – ${pesos(precios[precios.length - 1])}` : ''} · anotados por ti
+          </ThemedText>
+          {capturas.slice(0, 4).map((c) => (
+            <View key={c.id} style={styles.filaCaptura}>
+              <ThemedText type="chico" themeColor="textoSecundario" style={{ flex: 1 }}>
+                {[nombreFuente(c.fuente), c.condicion ? NOMBRE_CONDICION[c.condicion as Condicion] : null, fechaCorta(c.fecha)]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </ThemedText>
+              <ThemedText type="cuerpoFuerte">{pesos(c.precio)}</ThemedText>
+            </View>
+          ))}
+        </>
+      ) : (
+        <ThemedText type="chico" themeColor="textoSecundario">
+          ¿Lo viste en Marketplace? Anota el precio: es la mejor referencia de lo que piden en tu ciudad.
+        </ThemedText>
+      )}
+      <Boton texto="Anotar un precio que viste" variante="secundario" onPress={() => setAbierta(true)} />
+
+      <Hoja visible={abierta} titulo="Precio que viste" onCerrar={() => setAbierta(false)}>
+        <CampoPesos etiqueta="¿En cuánto lo tienen publicado?" valor={precio} onCambio={setPrecio} autoFocus />
+        <View style={{ gap: Spacing.xs }}>
+          <ThemedText type="chico" themeColor="textoSecundario">
+            Dónde lo viste
+          </ThemedText>
+          <View style={styles.pildoras}>
+            {FUENTES.map((f) => (
+              <Pildora key={f.valor} texto={f.texto} activa={fuente === f.valor} onPress={() => setFuente(f.valor)} />
+            ))}
+          </View>
+        </View>
+        <View style={{ gap: Spacing.xs }}>
+          <ThemedText type="chico" themeColor="textoSecundario">
+            Condición (opcional)
+          </ThemedText>
+          <View style={styles.pildoras}>
+            {CONDICIONES.map((c) => (
+              <Pildora key={c} texto={NOMBRE_CONDICION[c]} activa={condicion === c} onPress={() => setCondicion(condicion === c ? null : c)} />
+            ))}
+          </View>
+        </View>
+        {error ? (
+          <ThemedText type="chico" accessibilityRole="alert" style={{ color: theme.peligro }}>
+            {error}
+          </ThemedText>
+        ) : null}
+        <Boton texto={guardando ? 'Guardando…' : 'Guardar'} onPress={guardar} />
+      </Hoja>
+    </Tarjeta>
+  );
+}
+
+/** Cómo ha cambiado el precio en búsquedas anteriores (Google Shopping, una por día). */
+function SeccionHistorial({ historial }: { historial: api.PrecioVisto[] }) {
+  const theme = useTheme();
+  const [actual, ...antes] = historial;
+  const anterior = antes.find((h) => (actual.usado && h.usado) || (actual.nuevo && h.nuevo)) ?? antes[0];
+  const cambio = (hoy: number | null, antes: number | null) => (hoy && antes ? hoy - antes : null);
+  const usado = cambio(actual.usado, anterior.usado);
+  const nuevo = cambio(actual.nuevo, anterior.nuevo);
+  const principal = usado ?? nuevo;
+  const Icono = (principal ?? 0) < 0 ? TrendingDown : TrendingUp;
+  const texto = (titulo: string, d: number | null) =>
+    d == null ? null : `${titulo} ${d === 0 ? 'igual' : `${d > 0 ? 'subió' : 'bajó'} ${pesos(Math.abs(d))}`}`;
+
+  return (
+    <Tarjeta style={{ gap: Spacing.xs }}>
+      <View style={styles.tituloSeccion}>
+        <Icono size={IconSize.sm} color={theme.textoSecundario} />
+        <ThemedText type="cuerpoFuerte">Cómo ha cambiado el precio</ThemedText>
+      </View>
+      <ThemedText>
+        {[texto('Usado', usado), texto('Nuevo', nuevo)].filter(Boolean).join(' · ') || 'Sin datos para comparar'}
+      </ThemedText>
+      <ThemedText type="chico" themeColor="textoTenue">
+        Desde el {fechaCorta(anterior.fecha)}. Mediana de Google Shopping en tus búsquedas ({historial.length}{' '}
+        {historial.length === 1 ? 'día' : 'días'}).
+      </ThemedText>
+    </Tarjeta>
   );
 }
 
@@ -538,6 +740,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     padding: Spacing.md,
     minHeight: TocableMinimo + 16,
+  },
+  filaCaptura: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   ofertaEbay: {
     flexDirection: 'row',

@@ -6,7 +6,9 @@ import {
   Camera,
   ChevronLeft,
   CircleCheck,
+  Clock,
   EllipsisVertical,
+  Megaphone,
   Pencil,
   ImagePlus,
   Images,
@@ -16,18 +18,19 @@ import {
   Trash2,
 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CampoPesos, Hoja, OpcionMenu } from '@/components/hoja';
 import { ThemedText } from '@/components/themed-text';
 import { AvisoEjemplo, Boton, EtiquetaEstado, Miniatura, Pildora, Tarjeta } from '@/components/ui';
-import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
+import { Fonts, IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import * as api from '@/datos/api';
 import { hoy, useArticulo, useArticulos } from '@/datos/articulos';
 import { useEmparejado } from '@/datos/emparejado';
 import { prepararParaGuardar } from '@/datos/escaneo';
 import { diasEntre, fechaCorta, pesos, pesosConSigno } from '@/datos/formato';
+import { borradorAnuncio, diasSinVender, diasTipicosDeVenta, umbralEstancado, useValorInventario } from '@/datos/inventario';
 import {
   NOMBRE_CANAL,
   NOMBRE_CONDICION,
@@ -39,13 +42,14 @@ import {
 } from '@/datos/tipos';
 import { useTheme } from '@/hooks/use-theme';
 
-type HojaAbierta = null | 'publicar' | 'vender' | 'menu' | 'borrar' | 'agregarFoto' | { foto: Foto };
+type HojaAbierta = null | 'publicar' | 'vender' | 'menu' | 'borrar' | 'agregarFoto' | 'anuncio' | { foto: Foto };
 const CANALES: Canal[] = ['en_persona', 'marketplace', 'otro'];
 
 export default function FichaArticulo() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const articulo = useArticulo(Number(id));
-  const { sonDeEjemplo, actualizar, borrar, refrescar } = useArticulos();
+  const { articulos, sonDeEjemplo, actualizar, borrar, refrescar } = useArticulos();
+  const valores = useValorInventario();
   const { codigo } = useEmparejado();
   const theme = useTheme();
   const [hoja, setHoja] = useState<HojaAbierta>(null);
@@ -55,6 +59,7 @@ export default function FichaArticulo() {
   const [canal, setCanal] = useState<Canal>('en_persona');
   const [fotos, setFotos] = useState<Foto[]>([]);
   const [subiendo, setSubiendo] = useState(false);
+  const [anuncio, setAnuncio] = useState({ titulo: '', descripcion: '' });
 
   useEffect(() => {
     if (sonDeEjemplo || !articulo) return;
@@ -78,6 +83,22 @@ export default function FichaArticulo() {
 
   const estado = estadoDe(articulo);
   const ganancia = gananciaDe(articulo);
+  const valorHoy = valores.get(articulo.id);
+  const dias = diasSinVender(articulo);
+  const estancado = dias != null && dias > umbralEstancado(articulos);
+  const tipico = diasTipicosDeVenta(articulos);
+
+  const abrirAnuncio = () => {
+    setAnuncio(borradorAnuncio(articulo, articulo.precioPublicado ?? valorHoy?.precio ?? null));
+    setHoja('anuncio');
+  };
+  const compartirAnuncio = async () => {
+    try {
+      await Share.share({ title: anuncio.titulo, message: `${anuncio.titulo}\n\n${anuncio.descripcion}` });
+    } catch {
+      setError('No se pudo abrir el menú para compartir.');
+    }
+  };
   const cerrar = () => {
     setHoja(null);
     setError(null);
@@ -209,6 +230,35 @@ export default function FichaArticulo() {
           </ThemedText>
         ) : null}
 
+        {estancado ? (
+          <Tarjeta style={[styles.margen, styles.aviso, { borderColor: theme.destacado }]}>
+            <Clock size={IconSize.sm} color={theme.texto} />
+            <ThemedText style={{ flex: 1 }}>
+              Lleva {dias} días sin venderse
+              {tipico != null ? `; normalmente vendes en ~${tipico}` : ''}. Considera bajarle el precio o publicarlo en otro lado.
+            </ThemedText>
+          </Tarjeta>
+        ) : null}
+
+        {valorHoy && estado !== 'vendido' && estado !== 'descartado' ? (
+          <Tarjeta style={[styles.margen, { gap: 2 }]}>
+            <ThemedText themeColor="textoSecundario">Vale hoy</ThemedText>
+            <ThemedText type="subtitulo">{pesos(valorHoy.precio)}</ThemedText>
+            <ThemedText type="chico" themeColor="textoTenue">
+              {valorHoy.fuente === 'publicado'
+                ? 'Precio en que lo publicaste'
+                : `Mediana de usados en Google Shopping${valorHoy.fecha ? ` (${fechaCorta(valorHoy.fecha)})` : ''}`}
+              {articulo.precioCompra != null ? ` · pagaste ${pesos(articulo.precioCompra)}` : ''}
+            </ThemedText>
+          </Tarjeta>
+        ) : null}
+
+        {estado === 'inventario' || estado === 'publicado' ? (
+          <View style={styles.margen}>
+            <Boton texto="Crear anuncio" variante="secundario" Icono={Megaphone} onPress={abrirAnuncio} />
+          </View>
+        ) : null}
+
         {ganancia != null ? (
           <Tarjeta style={styles.margen}>
             <ThemedText themeColor="textoSecundario">Ganancia</ThemedText>
@@ -300,6 +350,21 @@ export default function FichaArticulo() {
         />
       </Hoja>
 
+      <Hoja visible={hoja === 'anuncio'} titulo="Anuncio" onCerrar={cerrar}>
+        <EntradaAnuncio etiqueta="Título" valor={anuncio.titulo} onCambio={(titulo) => setAnuncio((a) => ({ ...a, titulo }))} />
+        <EntradaAnuncio
+          etiqueta="Descripción"
+          valor={anuncio.descripcion}
+          onCambio={(descripcion) => setAnuncio((a) => ({ ...a, descripcion }))}
+          multilinea
+        />
+        <ThemedText type="chico" themeColor="textoTenue">
+          Se comparte el texto; las fotos agrégalas desde la galería en la app donde publiques.
+        </ThemedText>
+        <ErrorHoja error={error} />
+        <Boton texto="Compartir" Icono={Megaphone} onPress={compartirAnuncio} />
+      </Hoja>
+
       <Hoja visible={hoja === 'menu'} titulo="Opciones" onCerrar={cerrar}>
         {estado === 'publicado' ? (
           <OpcionMenu texto="Quitar de publicado" Icono={RotateCcw} onPress={() => guardar({ precio_publicado: null, fecha_publicado: null })} />
@@ -380,6 +445,38 @@ function ErrorHoja({ error }: { error: string | null }) {
     <ThemedText type="chico" accessibilityRole="alert" style={{ color: theme.peligro }}>
       {error}
     </ThemedText>
+  );
+}
+
+function EntradaAnuncio({
+  etiqueta,
+  valor,
+  onCambio,
+  multilinea,
+}: {
+  etiqueta: string;
+  valor: string;
+  onCambio: (v: string) => void;
+  multilinea?: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={{ gap: Spacing.xs }}>
+      <ThemedText type="chico" themeColor="textoSecundario">
+        {etiqueta}
+      </ThemedText>
+      <TextInput
+        accessibilityLabel={etiqueta}
+        value={valor}
+        onChangeText={onCambio}
+        multiline={multilinea}
+        style={[
+          styles.entradaAnuncio,
+          multilinea && styles.entradaLarga,
+          { color: theme.texto, borderColor: theme.borde, backgroundColor: theme.superficie },
+        ]}
+      />
+    </View>
   );
 }
 
@@ -479,6 +576,25 @@ const styles = StyleSheet.create({
     borderRadius: Radius.pildora,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  aviso: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    borderWidth: 1,
+  },
+  entradaAnuncio: {
+    minHeight: TocableMinimo,
+    borderWidth: 1,
+    borderRadius: Radius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontFamily: Fonts.regular,
+    fontSize: 16,
+  },
+  entradaLarga: {
+    minHeight: 120,
+    textAlignVertical: 'top',
   },
   acciones: {
     flexDirection: 'row',

@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Package, Plus } from 'lucide-react-native';
+import { Clock, Package, Plus } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
@@ -9,6 +9,7 @@ import { ThemedText } from '@/components/themed-text';
 import { AvisoEjemplo, Boton, EtiquetaEstado, Miniatura, Pildora } from '@/components/ui';
 import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import { useArticulos } from '@/datos/articulos';
+import { estancados, umbralEstancado, useValorInventario } from '@/datos/inventario';
 import { pesos, pesosConSigno } from '@/datos/formato';
 import { NOMBRE_CONDICION, NOMBRE_ESTADO, estadoDe, gananciaDe, type Articulo, type Estado } from '@/datos/tipos';
 import { useTheme } from '@/hooks/use-theme';
@@ -28,6 +29,11 @@ export default function Inventario() {
 
   const sinVender = [...porEstado.inventario, ...porEstado.publicado];
   const invertido = sinVender.reduce((s, a) => s + (a.precioCompra ?? 0), 0);
+  const valores = useValorInventario();
+  const conValor = sinVender.filter((a) => valores.has(a.id));
+  const valorHoy = conValor.reduce((s, a) => s + (valores.get(a.id)?.precio ?? 0), 0);
+  const parados = useMemo(() => estancados(articulos), [articulos]);
+  const umbral = umbralEstancado(articulos);
   const visibles = porEstado[estado];
 
   const botonRegistrar = (
@@ -81,7 +87,35 @@ export default function Inventario() {
         <ThemedText type="chico" themeColor="textoTenue">
           en {sinVender.length} {sinVender.length === 1 ? 'artículo' : 'artículos'} sin vender
         </ThemedText>
+        {conValor.length ? (
+          <ThemedText type="chico" themeColor="textoSecundario">
+            Vale hoy <ThemedText type="chico" style={{ color: theme.dinero }}>{pesos(valorHoy)}</ThemedText>
+            {conValor.length < sinVender.length ? ` (${conValor.length} de ${sinVender.length} con precio)` : ''} · precio
+            publicado o usados en Google Shopping
+          </ThemedText>
+        ) : null}
       </View>
+
+      {parados.length ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${parados.length} artículos llevan más de ${umbral} días sin venderse. Ver el primero`}
+          onPress={() => router.push({ pathname: '/articulo/[id]', params: { id: String(parados[0].articulo.id) } })}
+          style={({ pressed }) => [styles.estancados, { borderColor: theme.destacado, opacity: pressed ? 0.7 : 1 }]}>
+          <Clock size={IconSize.sm} color={theme.texto} />
+          <View style={{ flex: 1 }}>
+            <ThemedText type="cuerpoFuerte">
+              {parados.length === 1 ? '1 artículo lleva' : `${parados.length} artículos llevan`} más de {umbral} días sin venderse
+            </ThemedText>
+            <ThemedText type="chico" themeColor="textoSecundario" numberOfLines={1}>
+              {parados
+                .slice(0, 3)
+                .map((p) => `${p.articulo.nombre} (${p.dias} d)`)
+                .join(' · ')}
+            </ThemedText>
+          </View>
+        </Pressable>
+      ) : null}
 
       <View>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pildoras}>
@@ -178,6 +212,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
     gap: 2,
+  },
+  estancados: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    padding: Spacing.md,
+    borderRadius: Radius.md,
+    borderWidth: 1,
   },
   pildoras: {
     gap: Spacing.sm,

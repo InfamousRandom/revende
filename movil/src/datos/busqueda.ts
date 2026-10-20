@@ -33,6 +33,12 @@ export type Resultado = {
   mercadoLibre: api.CatalogoApi['precios'];
   lens: api.IdentificacionApi['precios'];
   tusVentas: { rango: Rango & { n: number }; diasMediana: number | null } | null;
+  /** Producto de tu catálogo con ese nombre (si ya existe). */
+  producto: { id: number; nombre: string } | null;
+  /** Precios de usado que viste publicados (Marketplace, etc.), de los últimos 12 meses. */
+  capturas: api.CapturaApi[];
+  /** Precios de búsquedas anteriores, para ver si sube o baja. */
+  historial: api.PrecioVisto[];
   /** Referencia internacional: no cuenta para la calculadora. */
   ebay: api.EbayApi | null;
   /** Foto reducida (para guardarla en el artículo si se compra). */
@@ -146,7 +152,7 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
   for (const p of catalogo?.productos ?? []) {
     if (p !== principal && !alternativas.includes(p.nombre) && alternativas.length < 5) alternativas.push(p.nombre);
   }
-  const ventas = rRef.ok ? rRef.datos.resumen?.todo : null;
+  const ventas = rRef.ok ? rRef.datos.resumen?.ventas : null;
 
   return {
     nombre,
@@ -159,6 +165,9 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
     mercadoLibre: principal ? (catalogo?.precios ?? null) : null,
     lens,
     tusVentas: ventas ? { rango: ventas, diasMediana: rRef.ok ? (rRef.datos.resumen?.dias_mediana ?? null) : null } : null,
+    producto: rRef.ok ? rRef.datos.producto : null,
+    capturas: rRef.ok ? (rRef.datos.capturas ?? []) : [],
+    historial: rPrecios.ok ? (rPrecios.datos.historial ?? []) : [],
     ebay: rEbay.ok && rEbay.datos.ofertas.length ? rEbay.datos : null,
     foto,
     avisos,
@@ -186,6 +195,15 @@ export async function buscarEjemplo(entrada: Entrada, avanzar: (paso: number) =>
     mercadoLibre: null,
     lens: [],
     tusVentas: { rango: { n: 2, mediana: 3300, min: 3100, max: 3500 }, diasMediana: 9 },
+    producto: null,
+    capturas: [
+      { id: 1, precio: 3000, fecha: '2026-10-14', fuente: 'marketplace', condicion: 'usado_bueno', url: null },
+      { id: 2, precio: 3400, fecha: '2026-10-02', fuente: 'marketplace', condicion: 'como_nuevo', url: null },
+    ],
+    historial: [
+      { fecha: '2026-10-20', nuevo: 4499, usado: 3150 },
+      { fecha: '2026-09-18', nuevo: 4699, usado: 3300 },
+    ],
     ebay: null,
     foto: entrada.tipo === 'foto' ? entrada.uri : null,
     avisos: [],

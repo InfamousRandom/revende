@@ -5,31 +5,33 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { CampoPesos } from '@/components/hoja';
+import { CampoPesos, Hoja } from '@/components/hoja';
 import { PantallaVacia } from '@/components/pantalla-vacia';
 import { ThemedText } from '@/components/themed-text';
 import { AvisoEjemplo, Boton, Tarjeta } from '@/components/ui';
 import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import * as api from '@/datos/api';
-import { useArticulos } from '@/datos/articulos';
+import { hoy, useArticulos } from '@/datos/articulos';
+import { precioDeReventa, repartirLote } from '@/datos/decision';
+import { prepararParaGuardar } from '@/datos/escaneo';
 import { buscar, buscarEjemplo } from '@/datos/busqueda';
 import { pesos } from '@/datos/formato';
 import { actualizarElemento, busquedasEstimadas, quitarDelLote, useLote, vaciarLote, type ElementoLote } from '@/datos/lote';
 import { useTheme } from '@/hooks/use-theme';
 
-/** Precio de reventa de un artículo del lote: tus ventas, si no la mediana de usados. Nunca inventado. */
+/** Precio de reventa de un artículo del lote (tus ventas, lo que viste publicado o usados). Nunca inventado. */
 function reventa(e: ElementoLote): { precio: number; fuente: string } | null {
-  const r = e.resultado;
-  if (!r) return null;
-  if (r.tusVentas) return { precio: r.tusVentas.rango.mediana, fuente: 'tus ventas' };
-  if (r.usados?.rango) return { precio: Math.round(r.usados.rango.mediana), fuente: 'usados en Google Shopping' };
-  return null;
+  return e.resultado ? precioDeReventa(e.resultado) : null;
 }
 
 export default function Lote() {
   const theme = useTheme();
   const lista = useLote();
-  const { sonDeEjemplo } = useArticulos();
+  const { sonDeEjemplo, registrarCompra } = useArticulos();
+  const [comprando, setComprando] = useState(false);
+  const [pagado, setPagado] = useState('');
+  const [registrando, setRegistrando] = useState(false);
+  const [errorCompra, setErrorCompra] = useState<string | null>(null);
   const [restantes, setRestantes] = useState<number | null>(null);
   const [buscando, setBuscando] = useState(false);
   const [ganancia, setGanancia] = useState('300');
@@ -69,6 +71,38 @@ export default function Lote() {
   };
 
   const cerrar = () => router.back();
+
+  // Al comprar el lote, cada artículo queda registrado con su parte de lo pagado (según lo que vale).
+  const conResultado = listos.filter((e) => e.resultado);
+  const partes = repartirLote(Number(pagado) || 0, conResultado.map((e) => reventa(e)?.precio ?? null));
+  const registrarLote = async () => {
+    const total = Number(pagado) || 0;
+    if (!(total > 0)) return setErrorCompra('Escribe cuánto pagaste por el lote.');
+    setRegistrando(true);
+    setErrorCompra(null);
+    for (const [i, e] of conResultado.entries()) {
+      const r = e.resultado!;
+      const hecho = await registrarCompra({
+        producto: { nombre: r.nombre, marca: r.marca, categoria: null },
+        precioCompra: partes[i],
+        fechaCompra: hoy(),
+        condicion: 'usado_bueno',
+        lugarCompra: null,
+        notas: `Parte de un lote de ${conResultado.length} artículos (pagaste ${pesos(total)} en total).`,
+      });
+      if (!hecho.ok) {
+        setRegistrando(false);
+        return setErrorCompra(`${r.nombre}: ${hecho.error}`);
+      }
+      if (!sonDeEjemplo && r.foto) await api.subirFoto(hecho.datos.id, await prepararParaGuardar(r.foto), 'image/jpeg');
+      // Lo ya registrado sale del lote, por si algo falla a la mitad.
+      quitarDelLote(e.id);
+    }
+    setRegistrando(false);
+    setComprando(false);
+    vaciarLote();
+    router.dismissAll();
+  };
 
   return (
     <SafeAreaView style={[styles.contenedor, { backgroundColor: theme.fondo }]}>
@@ -154,12 +188,55 @@ export default function Lote() {
                   </ThemedText>
                 ) : null}
               </View>
+              {conResultado.length && !pendientes.length && !buscando ? (
+                <Boton
+                  texto="Compré el lote"
+                  onPress={() => {
+                    setPagado(piden);
+                    setErrorCompra(null);
+                    setComprando(true);
+                  }}
+                />
+              ) : null}
             </Tarjeta>
           ) : null}
 
           {lista.map((e) => (
             <FilaLote key={e.id} e={e} />
           ))}
+
+          <Hoja visible={comprando} titulo="Registrar el lote" onCerrar={() => setComprando(false)}>
+            <CampoPesos etiqueta="¿Cuánto pagaste por todo?" valor={pagado} onCambio={setPagado} autoFocus />
+            <ThemedText type="chico" themeColor="textoSecundario">
+              {conResultado.every((e) => reventa(e))
+                ? 'Se reparte según lo que vale cada artículo:'
+                : 'Algunos no tienen precio de reventa, así que se reparte en partes iguales:'}
+            </ThemedText>
+            <ScrollView style={{ maxHeight: 220 }} contentContainerStyle={{ gap: Spacing.xs }}>
+              {conResultado.map((e, i) => (
+                <View key={e.id} style={styles.parte}>
+                  <ThemedText type="chico" numberOfLines={1} style={{ flex: 1 }}>
+                    {e.resultado?.nombre}
+                  </ThemedText>
+                  <ThemedText type="cuerpoFuerte">{Number(pagado) > 0 ? pesos(partes[i]) : '—'}</ThemedText>
+                </View>
+              ))}
+            </ScrollView>
+            {listos.length + pendientes.length < lista.length ? (
+              <ThemedText type="chico" themeColor="textoTenue">
+                Los artículos que no se encontraron no se registran.
+              </ThemedText>
+            ) : null}
+            {errorCompra ? (
+              <ThemedText type="chico" accessibilityRole="alert" style={{ color: theme.peligro }}>
+                {errorCompra}
+              </ThemedText>
+            ) : null}
+            <Boton
+              texto={registrando ? 'Registrando…' : `Registrar ${conResultado.length} ${conResultado.length === 1 ? 'artículo' : 'artículos'}`}
+              onPress={registrando ? () => {} : registrarLote}
+            />
+          </Hoja>
 
           <Boton
             texto="Vaciar el lote"
@@ -254,6 +331,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     padding: Spacing.md,
     gap: 2,
+  },
+  parte: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   fila: {
     flexDirection: 'row',
