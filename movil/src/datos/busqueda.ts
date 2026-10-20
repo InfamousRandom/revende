@@ -10,9 +10,13 @@ import { useEffect, useState } from 'react';
 
 import * as api from './api';
 import { RESULTADO_EJEMPLO } from './ejemplo';
-import { leerEtiqueta, modeloEnEtiqueta, reducirFoto } from './escaneo';
+import { codigoEnFoto, leerEtiqueta, modeloEnEtiqueta, reducirFoto } from './escaneo';
 
-export type Entrada = { tipo: 'texto'; consulta: string } | { tipo: 'codigo'; codigo: string } | { tipo: 'foto'; uri: string };
+export type Entrada =
+  | { tipo: 'texto'; consulta: string }
+  | { tipo: 'codigo'; codigo: string }
+  /** `extra`: más fotos del mismo artículo (etiqueta, código, otro ángulo). */
+  | { tipo: 'foto'; uri: string; extra?: string[] };
 
 type Rango = { min: number; mediana: number; max: number };
 
@@ -84,20 +88,39 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
     origen = 'codigo';
     avanzar(1);
   } else {
-    foto = await reducirFoto(entrada.uri);
+    // Todas las fotos del artículo (máximo 5), reducidas.
+    const fotos = await Promise.all([entrada.uri, ...(entrada.extra ?? [])].slice(0, 5).map(reducirFoto));
+    foto = fotos[0];
     avanzar(1);
-    const modelo = modeloEnEtiqueta(await leerEtiqueta(foto));
-    avanzar(2);
-    if (modelo) {
-      const c = await api.buscarCatalogo(modelo);
-      if (c.ok && c.datos.productos[0]?.completo) {
-        catalogo = c.datos;
-        nombre = c.datos.productos[0].nombre;
-        origen = 'etiqueta';
+    // 1) Código de barras en cualquiera de las fotos: gratis y exacto.
+    for (const f of fotos) {
+      const codigo = await codigoEnFoto(f);
+      if (!codigo) continue;
+      const r = await api.buscarCodigo(codigo);
+      if (r.ok) {
+        nombre = r.datos.nombre;
+        origen = 'codigo';
+        break;
       }
     }
+    // 2) Modelo escrito en la etiqueta (se lee el texto de todas las fotos) y reconocido por el catálogo.
     if (!nombre) {
-      const r = await api.identificarFoto(foto);
+      const lineas = (await Promise.all(fotos.map(leerEtiqueta))).flat();
+      const modelo = modeloEnEtiqueta(lineas);
+      avanzar(2);
+      if (modelo) {
+        const c = await api.buscarCatalogo(modelo);
+        if (c.ok && c.datos.productos[0]?.completo) {
+          catalogo = c.datos;
+          nombre = c.datos.productos[0].nombre;
+          origen = 'etiqueta';
+        }
+      }
+    }
+    // 3) Google Lens con la foto principal; si no reconoce nada, una vez más con la segunda.
+    if (!nombre) {
+      let r = await api.identificarFoto(fotos[0]);
+      if (!r.ok && r.status === 404 && fotos[1]) r = await api.identificarFoto(fotos[1]);
       if (!r.ok) throw new Error(r.error);
       nombre = r.datos.sugerido;
       alternativas = r.datos.candidatos;

@@ -1,7 +1,8 @@
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
-import { Camera, FlaskConical, Grid3x3, Images, Layers, PencilLine, RefreshCw, X } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import { Camera, FlaskConical, Grid3x3, Images, Layers, PencilLine, RefreshCw, Search, X } from 'lucide-react-native';
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,12 +18,14 @@ import { useTheme } from '@/hooks/use-theme';
 
 export type Modo = 'identificar' | 'codigo' | 'lote' | 'cartas';
 const MODOS: { id: Modo; nombre: string; ayuda: string }[] = [
-  { id: 'identificar', nombre: 'IDENTIFICAR', ayuda: 'Tómale foto y te decimos qué es y cuánto vale' },
+  { id: 'identificar', nombre: 'IDENTIFICAR', ayuda: 'Toma una o varias fotos (frente, etiqueta, código) y toca Identificar' },
   { id: 'codigo', nombre: 'CÓDIGO', ayuda: 'Apunta al código de barras' },
   { id: 'lote', nombre: 'LOTE', ayuda: 'Toma una foto o lee el código de cada artículo; al final buscamos todos' },
   { id: 'cartas', nombre: 'CARTAS', ayuda: 'Foto de la carta Pokémon completa, con el nombre y el número visibles' },
 ];
 const CODIGOS = ['ean13', 'ean8', 'upc_a', 'upc_e'] as const;
+/** Fotos de un mismo artículo para identificarlo mejor. */
+const MAX_FOTOS = 5;
 
 /** Cámara a pantalla completa (estilo SellRaze): foto para identificar o lectura de código de barras. */
 export default function Capturar() {
@@ -36,6 +39,8 @@ export default function Capturar() {
   const leido = useRef(false);
   const lote = useLote();
   const [agregado, setAgregado] = useState<string | null>(null);
+  // Fotos del artículo en modo Identificar: la primera es la principal.
+  const [fotos, setFotos] = useState<string[]>([]);
 
   const avisarAgregado = (texto: string) => {
     setAgregado(texto);
@@ -58,15 +63,29 @@ export default function Capturar() {
         const datos = datosDeCarta(await leerEtiqueta(await reducirFoto(foto.uri)));
         router.replace({ pathname: '/cartas', params: datos });
       } else {
-        irAResultado({ foto: foto.uri });
+        agregarFotos([foto.uri]);
       }
     } finally {
       setOcupado(false);
     }
   };
 
-  // Se pueden elegir varias: con la primera se identifica y el resto se guarda con el artículo.
-  // En modo Lote, cada foto es un artículo distinto.
+  const agregarFotos = (uris: string[]) => {
+    const espacio = MAX_FOTOS - fotos.length;
+    if (espacio <= 0) return avisarAgregado(`Máximo ${MAX_FOTOS} fotos por artículo`);
+    const nuevas = uris.slice(0, espacio);
+    setFotos((f) => [...f, ...nuevas]);
+    const total = fotos.length + nuevas.length;
+    avisarAgregado(`${total} ${total === 1 ? 'foto' : 'fotos'} · toma más o toca Identificar`);
+  };
+
+  // Todas las fotos sirven para identificar (etiqueta, código, Lens) y se guardan con el artículo.
+  const identificar = () => {
+    if (!fotos.length) return;
+    irAResultado({ foto: fotos[0], extra: fotos.length > 1 ? JSON.stringify(fotos.slice(1)) : undefined });
+  };
+
+  // Se pueden elegir varias de la galería. En modo Lote, cada foto es un artículo distinto.
   const desdeGaleria = async () => {
     const r = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -81,7 +100,7 @@ export default function Capturar() {
       avisarAgregado(`${uris.length} ${uris.length === 1 ? 'foto agregada' : 'fotos agregadas'} al lote`);
       return;
     }
-    irAResultado({ foto: uris[0], extra: uris.length > 1 ? JSON.stringify(uris.slice(1)) : undefined });
+    agregarFotos(uris);
   };
 
   const alLeerCodigo = ({ data }: BarcodeScanningResult) => {
@@ -186,6 +205,33 @@ export default function Capturar() {
               {agregado ?? ayuda}
             </ThemedText>
           </View>
+
+          {modo === 'identificar' && fotos.length ? (
+            <View style={styles.bandeja}>
+              {fotos.map((uri, i) => (
+                <Pressable
+                  key={uri}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Quitar foto ${i + 1}`}
+                  onPress={() => setFotos((f) => f.filter((x) => x !== uri))}>
+                  <Image source={{ uri }} style={[styles.miniatura, i === 0 && { borderColor: theme.primario }]} contentFit="cover" />
+                  <View style={styles.quitar}>
+                    <X size={12} color="#FFFFFF" />
+                  </View>
+                </Pressable>
+              ))}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Identificar con ${fotos.length} ${fotos.length === 1 ? 'foto' : 'fotos'}`}
+                onPress={identificar}
+                style={({ pressed }) => [styles.identificar, { backgroundColor: theme.primario, opacity: pressed ? 0.8 : 1 }]}>
+                <Search size={IconSize.sm} color="#FFFFFF" />
+                <ThemedText type="cuerpoFuerte" style={{ color: '#FFFFFF' }}>
+                  Identificar
+                </ThemedText>
+              </Pressable>
+            </View>
+          ) : null}
 
           {modo === 'lote' && lote.length ? (
             <Pressable
@@ -370,6 +416,39 @@ const styles = StyleSheet.create({
     height: 66,
     borderRadius: 33,
     backgroundColor: '#FFFFFF',
+  },
+  bandeja: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.lg,
+  },
+  miniatura: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.sm,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.7)',
+  },
+  quitar: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  identificar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.sm,
+    minHeight: TocableMinimo,
+    borderRadius: Radius.pildora,
   },
   verLote: {
     alignSelf: 'center',

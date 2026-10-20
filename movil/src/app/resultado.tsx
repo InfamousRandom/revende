@@ -30,9 +30,17 @@ export default function Resultado() {
     ? { tipo: 'texto', consulta: p.consulta }
     : p.codigo
       ? { tipo: 'codigo', codigo: p.codigo }
-      : { tipo: 'foto', uri: p.foto ?? '' };
+      : { tipo: 'foto', uri: p.foto ?? '', extra: leerExtra(p.extra) };
   const clave = p.consulta ?? p.codigo ?? p.foto ?? '';
   return <Flujo key={`${entrada.tipo}:${clave}`} entrada={entrada} extra={p.extra} />;
+}
+
+function leerExtra(extra?: string): string[] {
+  try {
+    return extra ? (JSON.parse(extra) as string[]) : [];
+  } catch {
+    return [];
+  }
 }
 
 function Flujo({ entrada, extra }: { entrada: Entrada; extra?: string }) {

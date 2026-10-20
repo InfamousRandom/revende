@@ -1,5 +1,6 @@
 /** Preparar fotos para identificar: reducirlas y leer el texto de la etiqueta en el teléfono. */
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
+import { scanFromURLAsync } from 'expo-camera';
 import { extractTextFromImage, isSupported } from 'expo-text-extractor';
 
 /** Foto reducida a 1024 px de ancho en JPEG (Lens acepta hasta 1.5 MB; queda en ~150-300 KB). */
@@ -54,4 +55,14 @@ export async function prepararParaGuardar(uri: string, png = false): Promise<str
   const imagen = actual.width > 1600 ? await ImageManipulator.manipulate(uri).resize({ width: 1600 }).renderAsync() : actual;
   const r = await imagen.saveAsync(png ? { format: SaveFormat.PNG } : { compress: 0.85, format: SaveFormat.JPEG });
   return r.uri;
+}
+
+/** Código de barras impreso en una foto (EAN/UPC), o null. */
+export async function codigoEnFoto(uri: string): Promise<string | null> {
+  try {
+    const r = await scanFromURLAsync(uri, ['ean13', 'ean8', 'upc_a', 'upc_e']);
+    return r.find((c) => /^\d{8,14}$/.test(c.data))?.data ?? null;
+  } catch {
+    return null;
+  }
 }
