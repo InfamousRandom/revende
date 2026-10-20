@@ -1,4 +1,3 @@
-import { Image } from 'expo-image';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
@@ -23,6 +22,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { FotosOrdenables } from '@/components/fotos-ordenables';
 import { CampoPesos, Hoja, OpcionMenu } from '@/components/hoja';
 import { ThemedText } from '@/components/themed-text';
 import { AvisoEjemplo, Boton, EtiquetaEstado, Miniatura, Pildora, Tarjeta } from '@/components/ui';
@@ -184,6 +184,20 @@ export default function FichaArticulo() {
     await refrescar(articulo.id);
   };
 
+  // Se ve el orden nuevo al instante; si el Worker falla, se regresa al anterior.
+  const reordenar = async (ids: number[]) => {
+    const antes = fotos;
+    setFotos(ids.map((id) => fotos.find((f) => f.id === id)).filter((f): f is Foto => Boolean(f)));
+    const r = await api.ordenarFotos(articulo.id, ids);
+    if (!r.ok) {
+      setFotos(antes);
+      setError(r.error);
+      return;
+    }
+    setFotos(r.datos.fotos);
+    await refrescar(articulo.id);
+  };
+
   const accionFoto = async (accion: 'portada' | 'borrar', foto: Foto) => {
     setHoja(null);
     const r = accion === 'portada' ? await api.hacerPortada(foto.id) : await api.borrarFoto(foto.id);
@@ -210,23 +224,7 @@ export default function FichaArticulo() {
         </View>
 
         {!sonDeEjemplo ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.fotos}>
-            {fotos.map((f, i) => (
-              <Pressable
-                key={f.id}
-                accessibilityRole="button"
-                accessibilityLabel={i === 0 ? 'Foto de portada' : `Foto ${i + 1}`}
-                onPress={() => setHoja({ foto: f })}>
-                <Image source={api.fuenteFoto(f.id, codigo)} style={styles.foto} contentFit="cover" />
-                {i === 0 ? (
-                  <View style={[styles.portada, { backgroundColor: theme.destacado }]}>
-                    <ThemedText type="etiqueta" style={{ color: theme.sobreDestacado }}>
-                      Portada
-                    </ThemedText>
-                  </View>
-                ) : null}
-              </Pressable>
-            ))}
+          <FotosOrdenables fotos={fotos} codigo={codigo} onTocar={(f) => setHoja({ foto: f })} onReordenar={reordenar}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Agregar foto"
@@ -235,7 +233,7 @@ export default function FichaArticulo() {
               style={[styles.foto, styles.agregarFoto, { borderColor: theme.borde }]}>
               {subiendo ? <ActivityIndicator color={theme.primario} /> : <ImagePlus size={IconSize.md} color={theme.textoSecundario} />}
             </Pressable>
-          </ScrollView>
+          </FotosOrdenables>
         ) : null}
 
         <View style={[styles.margen, styles.encabezado]}>

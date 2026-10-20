@@ -6,7 +6,7 @@ import { json, normalizar } from './util.js';
 const ML = 'https://api.mercadolibre.com';
 const CACHE_SEGUNDOS = 24 * 60 * 60;
 const CODIGO_SEGUNDOS = 30 * 24 * 60 * 60;
-const VERSION = 'v2';
+const VERSION = 'v4';
 
 // El catálogo mezcla accesorios con el producto; se quitan salvo que se hayan buscado.
 const ACCESORIOS = ['funda', 'fundas', 'cargador', 'soporte', 'cable', 'estuche', 'mica', 'protector', 'skin', 'case', 'adaptador', 'repuesto', 'refaccion', 'calcomania', 'sticker', 'correa', 'lector', 'organizador', 'revista'];
@@ -74,8 +74,16 @@ export async function catalogo(env, url) {
   const guardado = await env.CACHE?.get(clave, 'json');
   if (guardado) return json({ ...guardado, cache: true });
 
+  // Sin categoría, "iPhone 13" trae fundas y "PlayStation 5" trae juegos. Mercado Libre adivina la
+  // categoría del texto (domain_discovery) y se busca solo dentro de ella; si no hay nada, sin filtro.
+  let dominio = null;
+  if (!codigo) {
+    const d = await ml(env, `/sites/MLM/domain_discovery/search?limit=1&q=${encodeURIComponent(q)}`);
+    if (Array.isArray(d) && d[0]?.domain_id) dominio = { id: d[0].domain_id, nombre: d[0].domain_name || null };
+  }
   const busqueda = codigo ? `product_identifier=${codigo}` : `q=${encodeURIComponent(q)}`;
-  const lista = await ml(env, `/products/search?status=active&site_id=MLM&limit=20&${busqueda}`);
+  let lista = dominio ? await ml(env, `/products/search?status=active&site_id=MLM&limit=20&${busqueda}&domain_id=${dominio.id}`) : null;
+  if (!lista?.results?.length) lista = await ml(env, `/products/search?status=active&site_id=MLM&limit=20&${busqueda}`);
   const consulta = normalizar(q);
   const palabras = consulta.split(' ').filter((p) => p.length > 1);
   // El orden del catálogo no es bueno: primero los que traen más palabras buscadas y luego los
@@ -96,7 +104,9 @@ export async function catalogo(env, url) {
   const productos = detalles.map((d) => ({ ...aProducto(d), completo: Boolean(codigo) || puntaje(d.name) === palabras.length }));
   const precios = productos[0] ? await preciosDelCatalogo(env, productos[0]) : null;
 
-  const respuesta = { ok: true, productos, precios, fecha: new Date().toISOString() };
+  // Categoría en palabras ("consolas de videojuegos"), para sugerirla al registrar la compra.
+  const categoria = dominio?.nombre ? normalizar(dominio.nombre) : null;
+  const respuesta = { ok: true, productos, precios, categoria, fecha: new Date().toISOString() };
   if (productos.length) await env.CACHE?.put(clave, JSON.stringify(respuesta), { expirationTtl: CACHE_SEGUNDOS });
   return json({ ...respuesta, cache: false });
 }

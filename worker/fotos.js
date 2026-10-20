@@ -65,6 +65,19 @@ export async function hacerPortada(env, id) {
   return listarFotos(env, fila.operacion_id);
 }
 
+// Nuevo orden de las fotos (ids en el orden deseado; la primera es la portada). Deben ser todas.
+export async function ordenarFotos(request, env, operacionId) {
+  const ids = await request.json().then((c) => c?.ids).catch(() => null);
+  if (!Array.isArray(ids) || !ids.every((i) => Number.isInteger(i))) return json({ ok: false, error: 'Manda la lista de fotos' }, 400);
+  const { results } = await env.DB.prepare('SELECT id FROM fotos WHERE operacion_id = ?').bind(operacionId).all();
+  const actuales = new Set(results.map((f) => f.id));
+  if (ids.length !== actuales.size || !ids.every((i) => actuales.has(i))) {
+    return json({ ok: false, error: 'La lista no coincide con las fotos del artículo' }, 400);
+  }
+  await env.DB.batch(ids.map((id, orden) => env.DB.prepare('UPDATE fotos SET orden = ? WHERE id = ?').bind(orden, id)));
+  return listarFotos(env, operacionId);
+}
+
 export async function borrarFoto(env, id) {
   const fila = await env.DB.prepare('SELECT clave, operacion_id FROM fotos WHERE id = ?').bind(id).first();
   if (!fila) return json({ ok: false, error: 'Esa foto no existe' }, 404);

@@ -1,22 +1,25 @@
 import { ChartColumn, Clock, TrendingUp, Wallet, type LucideIcon } from 'lucide-react-native';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Pantalla } from '@/components/pantalla';
 import { PantallaVacia } from '@/components/pantalla-vacia';
 import { ThemedText } from '@/components/themed-text';
+import { TarjetaGastos } from '@/components/gastos';
 import { AvisoEjemplo, Tarjeta } from '@/components/ui';
 import { IconSize, Radius, Spacing } from '@/constants/theme';
-import { useArticulos } from '@/datos/articulos';
+import { hoy, useArticulos } from '@/datos/articulos';
 import { diasEntre, mesDe, pesos, pesosConSigno } from '@/datos/formato';
 import { estadoDe, gananciaDe, nombreCategoria } from '@/datos/tipos';
 import { useTheme } from '@/hooks/use-theme';
 
-const HOY = new Date().toISOString().slice(0, 10);
+const HOY = hoy();
 
 export default function Estadisticas() {
   const { articulos, sonDeEjemplo } = useArticulos();
   const theme = useTheme();
+  const [gastosMes, setGastosMes] = useState(0);
+  const tituloGastos = `Gastos de ${mesDe(HOY).toLowerCase()}`;
 
   const datos = useMemo(() => {
     const mesActual = HOY.slice(0, 7);
@@ -47,6 +50,9 @@ export default function Estadisticas() {
           titulo="Aún no hay números"
           texto="Cuando registres ventas verás tu ganancia del mes, lo invertido y cuánto tardas en vender."
         />
+        <View style={styles.contenido}>
+          <TarjetaGastos mes={HOY.slice(0, 7)} titulo={tituloGastos} onTotal={setGastosMes} />
+        </View>
       </Pantalla>
     );
   }
@@ -65,7 +71,19 @@ export default function Estadisticas() {
           <ThemedText type="chico" themeColor="textoTenue">
             {datos.vendidosMes} {datos.vendidosMes === 1 ? 'venta' : 'ventas'} este mes
           </ThemedText>
+          {gastosMes ? (
+            <ThemedText type="cuerpoFuerte" style={{ marginTop: Spacing.sm }}>
+              Después de gastos:{' '}
+              <ThemedText
+                type="cuerpoFuerte"
+                style={{ color: datos.gananciaMes - gastosMes >= 0 ? theme.dinero : theme.peligro }}>
+                {pesosConSigno(datos.gananciaMes - gastosMes)}
+              </ThemedText>
+            </ThemedText>
+          ) : null}
         </Tarjeta>
+
+        <TarjetaGastos mes={HOY.slice(0, 7)} titulo={tituloGastos} onTotal={setGastosMes} />
 
         <View style={styles.cuadros}>
           <Cuadro Icono={Wallet} titulo="Invertido ahora" valor={pesos(datos.invertido)} />

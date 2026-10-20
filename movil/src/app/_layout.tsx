@@ -10,8 +10,10 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AvisoActualizacion } from '@/components/aviso-actualizacion';
+import { ProcesadorPendientes } from '@/components/procesador-pendientes';
 import { Colors } from '@/constants/theme';
 import { ArticulosProvider } from '@/datos/articulos';
 import { EmparejadoProvider, useEmparejado } from '@/datos/emparejado';
@@ -50,15 +52,18 @@ export default function RootLayout() {
   };
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <ThemeProvider value={tema}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <EmparejadoProvider>
         <ArticulosProvider>
           <Rutas />
           <AvisoActualizacion />
+          <ProcesadorPendientes />
         </ArticulosProvider>
       </EmparejadoProvider>
     </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
 

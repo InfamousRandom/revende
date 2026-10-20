@@ -23,6 +23,8 @@ type Rango = { min: number; mediana: number; max: number };
 export type Resultado = {
   nombre: string;
   marca: string | null;
+  /** Categoría según Mercado Libre, para sugerirla al registrar. */
+  categoria: string | null;
   lanzamiento: number | null;
   /** De dónde salió el nombre. */
   origen: 'texto' | 'codigo' | 'etiqueta' | 'lens' | 'ejemplo';
@@ -52,22 +54,37 @@ export const PASOS: Record<Entrada['tipo'], string[]> = {
   texto: ['Buscando el artículo', 'Buscando precios', 'Listo'],
 };
 
-type Estado = { paso: number; resultado: Resultado | null; error: string | null };
+/** No hubo conexión con el servidor: la búsqueda se puede guardar para hacerla al volver la señal. */
+export class SinConexion extends Error {
+  constructor() {
+    super('No hay señal. Puedes guardar la búsqueda y se hará sola cuando vuelva el internet.');
+  }
+}
+
+// Una respuesta fallida sin conexión (status 0) se vuelve SinConexion; cualquier otra, un error normal.
+function exigir<T>(r: api.Respuesta<T>): T {
+  if (r.ok) return r.datos;
+  throw r.status === 0 ? new SinConexion() : new Error(r.error);
+}
+
+type Estado = { paso: number; resultado: Resultado | null; error: string | null; sinConexion: boolean };
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function useBusqueda(entrada: Entrada, deEjemplo: boolean): Estado {
-  const [estado, setEstado] = useState<Estado>({ paso: 0, resultado: null, error: null });
+  const [estado, setEstado] = useState<Estado>({ paso: 0, resultado: null, error: null, sinConexion: false });
 
   useEffect(() => {
     let vigente = true;
     const avanzar = (paso: number) => vigente && setEstado((e) => ({ ...e, paso }));
-    const terminar = (resultado: Resultado | null, error: string | null) =>
-      vigente && setEstado({ paso: PASOS[entrada.tipo].length - 1, resultado, error });
+    const terminar = (resultado: Resultado | null, error: string | null, sinConexion = false) =>
+      vigente && setEstado({ paso: PASOS[entrada.tipo].length - 1, resultado, error, sinConexion });
 
     (deEjemplo ? buscarEjemplo(entrada, avanzar) : buscar(entrada, avanzar))
       .then((r) => terminar(r, null))
-      .catch((e: unknown) => terminar(null, e instanceof Error ? e.message : 'Algo falló. Intenta de nuevo.'));
+      .catch((e: unknown) =>
+        terminar(null, e instanceof Error ? e.message : 'Algo falló. Intenta de nuevo.', e instanceof SinConexion),
+      );
     return () => {
       vigente = false;
     };
@@ -90,9 +107,7 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
   if (entrada.tipo === 'texto') {
     nombre = entrada.consulta;
   } else if (entrada.tipo === 'codigo') {
-    const r = await api.buscarCodigo(entrada.codigo);
-    if (!r.ok) throw new Error(r.error);
-    nombre = r.datos.nombre;
+    nombre = exigir(await api.buscarCodigo(entrada.codigo)).nombre;
     origen = 'codigo';
     avanzar(1);
   } else {
@@ -129,10 +144,10 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
     if (!nombre) {
       let r = await api.identificarFoto(fotos[0]);
       if (!r.ok && r.status === 404 && fotos[1]) r = await api.identificarFoto(fotos[1]);
-      if (!r.ok) throw new Error(r.error);
-      nombre = r.datos.sugerido;
-      alternativas = r.datos.candidatos;
-      lens = r.datos.precios;
+      const identificado = exigir(r);
+      nombre = identificado.sugerido;
+      alternativas = identificado.candidatos;
+      lens = identificado.precios;
       origen = 'lens';
     }
     avanzar(3);
@@ -144,6 +159,7 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
     api.buscarEbay(nombre),
   ]);
   if (rCatalogo?.ok) catalogo = rCatalogo.datos;
+  if (!rPrecios.ok && rPrecios.status === 0) throw new SinConexion();
   if (!rPrecios.ok) avisos.push(rPrecios.error);
   const precioNuevo = rPrecios.ok ? rPrecios.datos.nuevos.rango?.mediana : undefined;
   const rRef = await api.buscarReferencias(nombre, precioNuevo ? Math.round(precioNuevo) : undefined);
@@ -157,7 +173,9 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
   return {
     nombre,
     marca: principal?.marca ?? null,
-    lanzamiento: principal?.lanzamiento ?? null,
+    categoria: catalogo?.categoria ?? null,
+    // Si el principal no trae año, el de otra variante del mismo producto (mismo nombre completo).
+    lanzamiento: principal?.lanzamiento ?? catalogo?.productos.find((p) => p.completo && p.lanzamiento)?.lanzamiento ?? null,
     origen,
     alternativas: alternativas.filter((a) => a !== nombre).slice(0, 5),
     nuevos: rPrecios.ok ? rPrecios.datos.nuevos : null,
@@ -187,6 +205,7 @@ export async function buscarEjemplo(entrada: Entrada, avanzar: (paso: number) =>
   return {
     nombre: entrada.tipo === 'texto' ? entrada.consulta : r.nombre,
     marca: r.marca,
+    categoria: r.categoria,
     lanzamiento: r.lanzamiento ?? null,
     origen: 'ejemplo',
     alternativas: ['Nintendo Switch Lite Coral', 'Nintendo Switch OLED'],

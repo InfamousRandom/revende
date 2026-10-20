@@ -3,6 +3,7 @@ import { Layers, Package, Search } from 'lucide-react-native';
 import { StyleSheet, View } from 'react-native';
 
 import { CampoBusqueda } from '@/components/campo-busqueda';
+import { ListaPendientes } from '@/components/lista-pendientes';
 import { Pantalla } from '@/components/pantalla';
 import { PantallaVacia } from '@/components/pantalla-vacia';
 import { Boton } from '@/components/ui';
@@ -22,6 +23,7 @@ export default function Buscar() {
         <Boton texto="Cartas Pokémon" variante="secundario" Icono={Layers} onPress={() => router.push('/cartas')} />
         <Boton texto="Ver lote" variante="secundario" Icono={Package} onPress={() => router.push('/lote')} />
       </View>
+      <ListaPendientes />
       <PantallaVacia
         Icono={Search}
         titulo="Busca por nombre o modelo"

@@ -126,6 +126,11 @@ export async function subirFoto(operacionId: number, uri: string, tipo?: string)
   });
 }
 
+/** Nuevo orden de las fotos de un artículo (la primera es la portada). */
+export function ordenarFotos(operacionId: number, ids: number[]) {
+  return llamar<{ fotos: Foto[] }>(`/api/operaciones/${operacionId}/fotos/orden`, conJson('POST', { ids }));
+}
+
 export function hacerPortada(fotoId: number) {
   return llamar<{ fotos: Foto[] }>(`/api/fotos/${fotoId}/portada`, { method: 'POST' });
 }
@@ -185,6 +190,8 @@ export type ProductoCatalogo = {
 export type CatalogoApi = {
   productos: ProductoCatalogo[];
   precios: { fuente: string; link: string; total: number; precios: { precio: number; condicion: string; usado: boolean }[] } | null;
+  /** Categoría que adivina Mercado Libre ("consolas de videojuegos"). */
+  categoria?: string | null;
 };
 
 /** Catálogo de Mercado Libre (gratis). */
@@ -248,6 +255,22 @@ export type ValorArticuloApi = { id: number; precio: number | null; fuente: 'pub
 /** Lo que vale hoy cada artículo sin vender: precio publicado o última mediana de usados (gratis). */
 export function valorInventario() {
   return llamar<{ articulos: ValorArticuloApi[] }>('/api/valor-inventario');
+}
+
+// ---------- Gastos del mes ----------
+
+export type GastoApi = { id: number; concepto: string; monto: number; fecha: string };
+
+export function listarGastos(mes: string) {
+  return llamar<{ gastos: GastoApi[] }>(`/api/gastos?mes=${mes}`);
+}
+
+export function crearGasto(datos: { concepto: string; monto: number; fecha: string }) {
+  return llamar<{ gasto: GastoApi }>('/api/gastos', conJson('POST', datos));
+}
+
+export function borrarGasto(id: number) {
+  return llamar<{ borrado: number }>(`/api/gastos/${id}`, { method: 'DELETE' });
 }
 
 /** Búsquedas de SerpApi que quedan este mes. */

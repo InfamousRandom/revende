@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { Clock, Package, Plus } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Pantalla } from '@/components/pantalla';
@@ -8,6 +8,7 @@ import { PantallaVacia } from '@/components/pantalla-vacia';
 import { ThemedText } from '@/components/themed-text';
 import { AvisoEjemplo, Boton, EtiquetaEstado, Miniatura, Pildora } from '@/components/ui';
 import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
+import * as api from '@/datos/api';
 import { useArticulos } from '@/datos/articulos';
 import { estancados, umbralEstancado, useValorInventario } from '@/datos/inventario';
 import { pesos, pesosConSigno } from '@/datos/formato';
@@ -30,6 +31,18 @@ export default function Inventario() {
   const sinVender = [...porEstado.inventario, ...porEstado.publicado];
   const invertido = sinVender.reduce((s, a) => s + (a.precioCompra ?? 0), 0);
   const valores = useValorInventario();
+  const [cuota, setCuota] = useState<{ restantes: number; mensuales: number } | null>(null);
+  // Consultar la cuota no gasta búsquedas. Se actualiza al cambiar los artículos (después de buscar y registrar).
+  useEffect(() => {
+    if (sonDeEjemplo) return;
+    let vigente = true;
+    void api.cuota().then((r) => {
+      if (vigente && r.ok) setCuota(r.datos);
+    });
+    return () => {
+      vigente = false;
+    };
+  }, [sonDeEjemplo, articulos.length]);
   const conValor = sinVender.filter((a) => valores.has(a.id));
   const valorHoy = conValor.reduce((s, a) => s + (valores.get(a.id)?.precio ?? 0), 0);
   const parados = useMemo(() => estancados(articulos), [articulos]);
@@ -95,6 +108,15 @@ export default function Inventario() {
           </ThemedText>
         ) : null}
       </View>
+
+      {cuota ? (
+        <ThemedText
+          type="chico"
+          themeColor={cuota.restantes > 20 ? 'textoTenue' : undefined}
+          style={[styles.cuota, cuota.restantes <= 20 && { color: theme.peligro }]}>
+          Te quedan {cuota.restantes} de {cuota.mensuales} búsquedas de precios este mes
+        </ThemedText>
+      ) : null}
 
       {parados.length ? (
         <Pressable
@@ -212,6 +234,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     paddingBottom: Spacing.md,
     gap: 2,
+  },
+  cuota: {
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing.md,
   },
   estancados: {
     flexDirection: 'row',

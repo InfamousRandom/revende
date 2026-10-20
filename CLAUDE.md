@@ -59,7 +59,8 @@ producción hasta que la versión web de 2.0 la reemplace.
 - Rutas nuevas del Worker (2.0): `/api/emparejar`, `/api/operaciones/:id/fotos`, `/api/fotos/:id`
   (R2 `FOTOS_ARTICULOS`), `/api/catalogo` y `/api/codigo` (`worker/catalogo.js`), `/api/cartas`
   (`worker/cartas.js`), `/api/ebay` (`worker/ebay.js`, referencia internacional),
-  `/api/valor-inventario` (historial.js; usa la tabla `precios_vistos` que llena `/api/precios`), `/api/insight` y `/api/autenticidad` (IA, ocultas en la app).
+  `/api/valor-inventario` (historial.js; usa la tabla `precios_vistos` que llena `/api/precios`),
+  `/api/gastos` (historial.js), `/api/operaciones/:id/fotos/orden` (fotos.js), `/api/insight` y `/api/autenticidad` (IA, ocultas en la app).
 - Para probar la app en local sin el código real: `npx wrangler dev --var REVENDE_DISPOSITIVO:<prueba>`.
   La búsqueda de precios en local sí gasta SerpApi real.
 

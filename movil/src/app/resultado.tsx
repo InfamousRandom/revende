@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calculator, ExternalLink, Globe, History, Search, Store, TrendingDown, TrendingUp, X } from 'lucide-react-native';
+import { Calculator, ExternalLink, Globe, History, Search, Store, TrendingDown, TrendingUp, WifiOff, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +19,7 @@ import { useArticulos } from '@/datos/articulos';
 import { PASOS, useBusqueda, type Entrada, type Resultado as DatosResultado } from '@/datos/busqueda';
 import { precioDeReventa, veredicto, type Veredicto } from '@/datos/decision';
 import { fechaCorta, pesos } from '@/datos/formato';
+import { guardarPendiente, leerPendiente } from '@/datos/pendientes';
 import { NOMBRE_CONDICION, type Condicion } from '@/datos/tipos';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -29,7 +30,13 @@ const VISIBLES = 6;
  * Nunca muestra un precio sin su fuente.
  */
 export default function Resultado() {
-  const p = useLocalSearchParams<{ consulta?: string; codigo?: string; foto?: string; extra?: string }>();
+  const p = useLocalSearchParams<{ consulta?: string; codigo?: string; foto?: string; extra?: string; pendiente?: string }>();
+  // Búsqueda guardada sin señal que ya se hizo: se muestra su resultado sin volver a buscar.
+  const guardada = p.pendiente ? leerPendiente(p.pendiente) : undefined;
+  if (guardada?.resultado) {
+    const extraGuardado = guardada.entrada.tipo === 'foto' ? JSON.stringify(guardada.entrada.extra ?? []) : undefined;
+    return <VistaResultado r={guardada.resultado} entrada={guardada.entrada} extra={extraGuardado} />;
+  }
   const entrada: Entrada = p.consulta
     ? { tipo: 'texto', consulta: p.consulta }
     : p.codigo
@@ -49,9 +56,9 @@ function leerExtra(extra?: string): string[] {
 
 function Flujo({ entrada, extra }: { entrada: Entrada; extra?: string }) {
   const { sonDeEjemplo } = useArticulos();
-  const { paso, resultado, error } = useBusqueda(entrada, sonDeEjemplo);
+  const { paso, resultado, error, sinConexion } = useBusqueda(entrada, sonDeEjemplo);
 
-  if (error) return <Falla error={error} entrada={entrada} />;
+  if (error) return <Falla error={error} entrada={entrada} sinConexion={sinConexion} />;
   if (!resultado) return <Procesando entrada={entrada} paso={paso} />;
   return <VistaResultado r={resultado} entrada={entrada} extra={extra} />;
 }
@@ -81,13 +88,25 @@ function Procesando({ entrada, paso }: { entrada: Entrada; paso: number }) {
   );
 }
 
-function Falla({ error, entrada }: { error: string; entrada: Entrada }) {
+function Falla({ error, entrada, sinConexion }: { error: string; entrada: Entrada; sinConexion: boolean }) {
   const theme = useTheme();
+  const [guardando, setGuardando] = useState(false);
+  const guardar = async () => {
+    setGuardando(true);
+    await guardarPendiente(entrada);
+    router.dismissAll();
+    router.navigate('/buscar');
+  };
   return (
     <SafeAreaView style={[styles.contenedor, { backgroundColor: theme.fondo }]}>
       <BarraSuperior />
-      <PantallaVacia Icono={Search} titulo="No encontramos el artículo" texto={error} />
+      <PantallaVacia Icono={sinConexion ? WifiOff : Search} titulo={sinConexion ? 'Sin señal' : 'No encontramos el artículo'} texto={error} />
       <View style={styles.falla}>
+        {sinConexion ? (
+          <View style={{ marginBottom: Spacing.lg }}>
+            <Boton texto={guardando ? 'Guardando…' : 'Buscar cuando vuelva la señal'} onPress={guardar} />
+          </View>
+        ) : null}
         <CampoBusqueda
           etiqueta="Escribir el nombre o modelo"
           placeholder="Escribe el nombre o modelo"
@@ -139,6 +158,7 @@ function VistaResultado({ r, entrada, extra }: { r: DatosResultado; entrada: Ent
       params: {
         nombre: r.nombre,
         marca: r.marca ?? '',
+        categoria: r.categoria ?? '',
         maximo: String(Math.max(maximo, 0)),
         precio: piden,
         foto: r.foto ?? '',
@@ -618,6 +638,9 @@ function ListaOfertas({ titulo, ofertas }: { titulo: string; ofertas: OfertaApi[
           accessibilityLabel={`${o.titulo}, ${o.tienda}, ${pesos(o.precio)}${o.aviso ? `, ${o.aviso}` : ''}`}
           onPress={() => Linking.openURL(o.link)}
           style={({ pressed }) => [styles.oferta, { backgroundColor: theme.superficie, opacity: pressed ? 0.7 : o.aviso ? 0.55 : 1 }]}>
+          {o.miniatura ? (
+            <Image source={{ uri: o.miniatura }} style={[styles.miniaturaOferta, { backgroundColor: theme.superficieAlta }]} contentFit="cover" />
+          ) : null}
           <View style={{ flex: 1, gap: 2 }}>
             <ThemedText numberOfLines={1}>{o.titulo}</ThemedText>
             <View style={styles.tienda}>
@@ -740,6 +763,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     padding: Spacing.md,
     minHeight: TocableMinimo + 16,
+  },
+  miniaturaOferta: {
+    width: 48,
+    height: 48,
+    borderRadius: Radius.sm,
   },
   filaCaptura: {
     flexDirection: 'row',

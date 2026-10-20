@@ -172,6 +172,17 @@ orden que eligió Pablo:
 - [x] Anuncio con foto: comparte la portada (`expo-sharing`) y copia el texto (`expo-clipboard`).
 - [x] Buscar por voz (`expo-speech-recognition`, es-MX) en los campos de búsqueda. Solo llena el
       texto; la búsqueda se confirma con la lupa. Necesita el permiso de micrófono.
+- [x] Mercado Libre: la memoria del catálogo era anterior al campo `completo` (por eso no salían
+      marca, año ni precios); ahora se busca dentro de la categoría que adivina ML
+      (`domain_discovery`), con lo que "iPhone 13" ya no trae fundas ni "PS5" juegos. La categoría se
+      sugiere al registrar. Los precios del catálogo casi nunca vienen (ML responde "No winners").
+- [x] Miniaturas en los resultados de Google Shopping y búsquedas restantes de SerpApi en Inicio.
+- [x] Gastos del mes (`gastos`, migración 0004, `/api/gastos`) en Estadísticas, con ganancia después
+      de gastos. No se incluyen todavía en el respaldo CSV.
+- [x] Reordenar fotos: mantener presionada y arrastrar (`/api/operaciones/:id/fotos/orden`).
+- [x] Búsquedas sin señal: se guardan en el celular (`datos/pendientes.ts`, fotos copiadas) y se
+      hacen solas al volver el internet (`expo-network`), con 30 s entre reintentos; el resultado
+      queda en la pestaña Buscar.
 
 ## Fase V9: versión web
 

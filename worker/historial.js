@@ -2,7 +2,7 @@
 // Sin clave (decisión de Pablo, 2026-10-16): como precios, solo acepta llamadas desde la app.
 import { json, normalizar, verificarAcceso } from './util.js';
 import { escribirCsv, leerCsv } from './csv.js';
-import { borrarFoto, borrarFotosDeOperacion, hacerPortada, listarFotos, servirFoto, subirFoto } from './fotos.js';
+import { borrarFoto, borrarFotosDeOperacion, hacerPortada, listarFotos, ordenarFotos, servirFoto, subirFoto } from './fotos.js';
 
 const CONDICIONES = ['sellado', 'como_nuevo', 'usado_bueno', 'con_detalles'];
 const CANALES = ['en_persona', 'marketplace', 'otro'];
@@ -10,7 +10,7 @@ const MAX_TEXTO = 120;
 const MAX_NOTAS = 1000;
 const MAX_PESOS = 10_000_000;
 
-export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas|exportar|importar|fotos|valor-inventario)(\/|$)/.test(ruta);
+export const esRutaHistorial = (ruta) => /^\/api\/(productos|operaciones|referencias|capturas|exportar|importar|fotos|valor-inventario|gastos)(\/|$)/.test(ruta);
 
 const FUENTES = ['marketplace', 'ml_usado', 'otro'];
 
@@ -489,6 +489,37 @@ async function crearCaptura(request, env) {
   return json({ ok: true, captura: guardada }, 201);
 }
 
+// ---------- Gastos del mes (gasolina, publicidad…): solo para la ganancia neta ----------
+
+async function listarGastos(env, url) {
+  const mes = url.searchParams.get('mes') || hoyMexico().slice(0, 7);
+  if (!/^\d{4}-\d{2}$/.test(mes)) fallar('Mes inválido (AAAA-MM)');
+  const { results } = await env.DB.prepare(
+    "SELECT id, concepto, monto, fecha FROM gastos WHERE fecha LIKE ? || '-%' ORDER BY fecha DESC, id DESC",
+  )
+    .bind(mes)
+    .all();
+  return json({ ok: true, mes, gastos: results });
+}
+
+async function crearGasto(request, env) {
+  const c = await leerCuerpo(request);
+  const concepto = texto(c.concepto, 'Concepto');
+  if (!concepto) fallar('Escribe en qué gastaste');
+  const monto = pesos(c.monto, 'Monto');
+  if (!monto) fallar('Escribe cuánto gastaste');
+  const gasto = await env.DB.prepare('INSERT INTO gastos (concepto, monto, fecha) VALUES (?, ?, ?) RETURNING id, concepto, monto, fecha')
+    .bind(concepto, monto, fecha(c.fecha, 'Fecha') || hoyMexico())
+    .first();
+  return json({ ok: true, gasto }, 201);
+}
+
+async function borrarGasto(env, id) {
+  const { meta } = await env.DB.prepare('DELETE FROM gastos WHERE id = ?').bind(id).run();
+  if (!meta.changes) return json({ ok: false, error: 'Ese gasto no existe' }, 404);
+  return json({ ok: true, borrado: id });
+}
+
 // ---------- Valor de lo que tengo sin vender ----------
 // Por artículo: el precio en que lo publicaste; si no, la última mediana de usados que salió al
 // buscarlo en Google Shopping (precios_vistos). Sin ninguno de los dos, queda sin valor: no se estima.
@@ -731,6 +762,12 @@ export async function historial(request, env, url) {
     if (ruta === '/api/referencias' && metodo === 'GET') return await referencias(env, url);
     if (ruta === '/api/capturas' && metodo === 'POST') return await crearCaptura(request, env);
     if (ruta === '/api/valor-inventario' && metodo === 'GET') return await valorInventario(env);
+    if (ruta === '/api/gastos') {
+      if (metodo === 'GET') return await listarGastos(env, url);
+      if (metodo === 'POST') return await crearGasto(request, env);
+    }
+    const unGasto = /^\/api\/gastos\/(\d+)$/.exec(ruta);
+    if (unGasto && metodo === 'DELETE') return await borrarGasto(env, Number(unGasto[1]));
     if (ruta === '/api/exportar' && metodo === 'GET') return await exportar(env);
     if (ruta === '/api/importar' && metodo === 'POST') return await importar(request, env, url);
     const unaOperacion = /^\/api\/operaciones\/(\d+)$/.exec(ruta);
@@ -749,6 +786,8 @@ export async function historial(request, env, url) {
       if (metodo === 'GET') return await listarFotos(env, id);
       if (metodo === 'POST') return await subirFoto(request, env, id);
     }
+    const ordenDe = /^\/api\/operaciones\/(\d+)\/fotos\/orden$/.exec(ruta);
+    if (ordenDe && metodo === 'POST') return await ordenarFotos(request, env, Number(ordenDe[1]));
     const unaFoto = /^\/api\/fotos\/(\d+)$/.exec(ruta);
     if (unaFoto) {
       const id = Number(unaFoto[1]);
