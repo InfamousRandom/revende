@@ -44,7 +44,7 @@ export async function quitarFondo(uri: string): Promise<string> {
 }
 
 /** Copia local de una foto guardada en el Worker (necesita el código del dispositivo). */
-export async function descargarFoto(fotoId: number, codigo: string | null): Promise<string> {
+export async function descargarFoto(fotoId: number, codigo: string | null, extension = ''): Promise<string> {
   const url = `${API_URL}/api/fotos/${fotoId}`;
   const headers: Record<string, string> = codigo ? { [ENCABEZADO_DISPOSITIVO]: codigo } : {};
   if (Platform.OS === 'web') {
@@ -52,7 +52,7 @@ export async function descargarFoto(fotoId: number, codigo: string | null): Prom
     if (!r.ok) throw new Error('No se pudo abrir la foto.');
     return URL.createObjectURL(await r.blob());
   }
-  const destino = new File(Paths.cache, `foto-${fotoId}-${Date.now()}`);
+  const destino = new File(Paths.cache, `foto-${fotoId}-${Date.now()}${extension}`);
   const archivo = await File.downloadFileAsync(url, destino, { headers, idempotent: true });
   return archivo.uri;
 }

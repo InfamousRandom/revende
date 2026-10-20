@@ -45,6 +45,11 @@ producción hasta que la versión web de 2.0 la reemplace.
   `x-revende-dispositivo` (`verificarAcceso` en `worker/util.js`); bloqueo de 15 min tras 5 fallos.
   La app lo guarda cifrado con `expo-secure-store`. Nunca pedirle a Pablo que pegue el código en el
   chat; él lo pone en `.dev.vars`.
+- Actualizaciones sin recompilar (EAS Update, canal `apk`, desde el APK de 2026-10-20): cambios de
+  pantallas y lógica se publican con `npm run actualizar -- "qué cambió"` (desde `movil/`; siempre
+  apunta al Worker de producción). La app avisa "Versión nueva lista". Un paquete nuevo con código
+  nativo sí requiere APK nuevo (`runtimeVersion` con política `fingerprint`). Publicar una
+  actualización llega al celular de Pablo: preguntar antes, igual que un push.
 - Comandos de la app (desde `movil/`): `npx expo start --web` (vista previa), `npx tsc --noEmit` y
   `npx eslint src` antes de dar algo por terminado. `movil/.env.local` (ignorado) puede apuntar
   `EXPO_PUBLIC_API_URL` al Worker local (`http://127.0.0.1:8787`); el Worker solo acepta CORS de

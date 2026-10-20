@@ -2,6 +2,8 @@ import { Search, X } from 'lucide-react-native';
 import { useState } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
+import { BotonVoz } from '@/components/boton-voz';
+import { ThemedText } from '@/components/themed-text';
 import { Fonts, IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -18,46 +20,61 @@ type Props = {
 export function CampoBusqueda({ etiqueta, placeholder, valorInicial = '', autoFocus, onBuscar }: Props) {
   const theme = useTheme();
   const [texto, setTexto] = useState(valorInicial);
+  const [errorVoz, setErrorVoz] = useState<string | null>(null);
   const consulta = texto.trim();
   const buscar = () => {
     if (consulta.length >= 2) onBuscar(consulta);
   };
 
   return (
-    <View style={[styles.campo, { backgroundColor: theme.superficie }]}>
-      <TextInput
-        accessibilityLabel={etiqueta}
-        value={texto}
-        onChangeText={setTexto}
-        onSubmitEditing={buscar}
-        placeholder={placeholder}
-        placeholderTextColor={theme.textoTenue}
-        returnKeyType="search"
-        autoCorrect={false}
-        autoFocus={autoFocus}
-        style={[styles.entrada, { color: theme.texto }]}
-      />
-      {texto ? (
+    <View style={{ gap: Spacing.xs }}>
+      <View style={[styles.campo, { backgroundColor: theme.superficie }]}>
+        <TextInput
+          accessibilityLabel={etiqueta}
+          value={texto}
+          onChangeText={setTexto}
+          onSubmitEditing={buscar}
+          placeholder={placeholder}
+          placeholderTextColor={theme.textoTenue}
+          returnKeyType="search"
+          autoCorrect={false}
+          autoFocus={autoFocus}
+          style={[styles.entrada, { color: theme.texto }]}
+        />
+        {texto ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Borrar texto"
+            onPress={() => setTexto('')}
+            hitSlop={8}
+            style={styles.icono}>
+            <X size={IconSize.sm} color={theme.textoTenue} />
+          </Pressable>
+        ) : null}
+        <BotonVoz
+          onTexto={(t) => {
+            setErrorVoz(null);
+            setTexto(t);
+          }}
+          onError={setErrorVoz}
+        />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Borrar texto"
-          onPress={() => setTexto('')}
-          hitSlop={8}
-          style={styles.icono}>
-          <X size={IconSize.sm} color={theme.textoTenue} />
+          accessibilityLabel="Buscar precios"
+          aria-disabled={consulta.length < 2}
+          onPress={buscar}
+          style={({ pressed }) => [
+            styles.lupa,
+            { backgroundColor: consulta.length >= 2 ? theme.primario : theme.superficieAlta, opacity: pressed ? 0.7 : 1 },
+          ]}>
+          <Search size={IconSize.sm} color={consulta.length >= 2 ? theme.sobrePrimario : theme.textoTenue} />
         </Pressable>
+      </View>
+      {errorVoz ? (
+        <ThemedText type="chico" accessibilityRole="alert" style={{ color: theme.peligro, paddingHorizontal: Spacing.lg }}>
+          {errorVoz}
+        </ThemedText>
       ) : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Buscar precios"
-        aria-disabled={consulta.length < 2}
-        onPress={buscar}
-        style={({ pressed }) => [
-          styles.lupa,
-          { backgroundColor: consulta.length >= 2 ? theme.primario : theme.superficieAlta, opacity: pressed ? 0.7 : 1 },
-        ]}>
-        <Search size={IconSize.sm} color={consulta.length >= 2 ? theme.sobrePrimario : theme.textoTenue} />
-      </Pressable>
     </View>
   );
 }

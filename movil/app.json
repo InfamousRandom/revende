@@ -18,10 +18,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "mx.revende.app",
-      "blockedPermissions": [
-        "android.permission.RECORD_AUDIO"
-      ]
+      "package": "mx.revende.app"
     },
     "web": {
       "output": "single",
@@ -51,11 +48,22 @@
         "expo-image-picker",
         {
           "photosPermission": "Revende usa tus fotos para identificar artículos y guardarlas en tu inventario.",
-          "cameraPermission": "Revende usa la cámara para tomarle foto a los artículos.",
-          "microphonePermission": false
+          "cameraPermission": "Revende usa la cámara para tomarle foto a los artículos."
         }
       ],
-      "./plugins/con-mlkit.js"
+      "./plugins/con-mlkit.js",
+      "expo-sharing",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Revende usa el micrófono solo cuando tocas el botón para dictar lo que buscas.",
+          "speechRecognitionPermission": "Revende convierte tu voz en texto para buscar artículos.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox",
+            "com.google.android.tts"
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -70,6 +78,12 @@
       "eas": {
         "projectId": "0baf5f5d-b170-490b-a708-5e29d00fea1a"
       }
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0baf5f5d-b170-490b-a708-5e29d00fea1a"
+    },
+    "runtimeVersion": {
+      "policy": "fingerprint"
     }
   }
 }

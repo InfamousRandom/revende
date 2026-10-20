@@ -1,5 +1,7 @@
 import { Image } from 'expo-image';
+import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
+import * as Sharing from 'expo-sharing';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   ArchiveX,
@@ -28,6 +30,7 @@ import { Fonts, IconSize, Radius, Spacing, TocableMinimo } from '@/constants/the
 import * as api from '@/datos/api';
 import { hoy, useArticulo, useArticulos } from '@/datos/articulos';
 import { useEmparejado } from '@/datos/emparejado';
+import { descargarFoto } from '@/datos/editor';
 import { prepararParaGuardar } from '@/datos/escaneo';
 import { diasEntre, fechaCorta, pesos, pesosConSigno } from '@/datos/formato';
 import { borradorAnuncio, diasSinVender, diasTipicosDeVenta, umbralEstancado, useValorInventario } from '@/datos/inventario';
@@ -60,6 +63,7 @@ export default function FichaArticulo() {
   const [fotos, setFotos] = useState<Foto[]>([]);
   const [subiendo, setSubiendo] = useState(false);
   const [anuncio, setAnuncio] = useState({ titulo: '', descripcion: '' });
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     if (sonDeEjemplo || !articulo) return;
@@ -90,13 +94,35 @@ export default function FichaArticulo() {
 
   const abrirAnuncio = () => {
     setAnuncio(borradorAnuncio(articulo, articulo.precioPublicado ?? valorHoy?.precio ?? null));
+    setCopiado(false);
     setHoja('anuncio');
   };
-  const compartirAnuncio = async () => {
+  const textoAnuncio = `${anuncio.titulo}\n\n${anuncio.descripcion}`;
+  const compartirTexto = async () => {
     try {
-      await Share.share({ title: anuncio.titulo, message: `${anuncio.titulo}\n\n${anuncio.descripcion}` });
+      await Share.share({ title: anuncio.titulo, message: textoAnuncio });
     } catch {
       setError('No se pudo abrir el menú para compartir.');
+    }
+  };
+  // Android solo comparte un archivo a la vez: va la foto de portada y el texto queda copiado
+  // para pegarlo en la descripción.
+  const compartirConFoto = async () => {
+    const portada = fotos[0];
+    if (!portada) return compartirTexto();
+    setGuardando(true);
+    setError(null);
+    try {
+      await Clipboard.setStringAsync(textoAnuncio);
+      const extension = portada.tipo === 'image/png' ? '.png' : portada.tipo === 'image/webp' ? '.webp' : '.jpg';
+      const archivo = await descargarFoto(portada.id, codigo, extension);
+      if (!(await Sharing.isAvailableAsync())) throw new Error('sin compartir');
+      setCopiado(true);
+      await Sharing.shareAsync(archivo, { mimeType: portada.tipo, dialogTitle: anuncio.titulo });
+    } catch {
+      setError('No se pudo compartir la foto. Prueba con «Solo el texto».');
+    } finally {
+      setGuardando(false);
     }
   };
   const cerrar = () => {
@@ -358,11 +384,26 @@ export default function FichaArticulo() {
           onCambio={(descripcion) => setAnuncio((a) => ({ ...a, descripcion }))}
           multilinea
         />
-        <ThemedText type="chico" themeColor="textoTenue">
-          Se comparte el texto; las fotos agrégalas desde la galería en la app donde publiques.
-        </ThemedText>
+        {copiado ? (
+          <ThemedText type="chico" style={{ color: theme.dinero }}>
+            El texto quedó copiado: pégalo en la descripción del anuncio.
+          </ThemedText>
+        ) : (
+          <ThemedText type="chico" themeColor="textoTenue">
+            {fotos.length
+              ? 'Se comparte la foto de portada y el texto queda copiado para pegarlo.'
+              : 'Este artículo no tiene fotos; se comparte solo el texto.'}
+          </ThemedText>
+        )}
         <ErrorHoja error={error} />
-        <Boton texto="Compartir" Icono={Megaphone} onPress={compartirAnuncio} />
+        {fotos.length ? (
+          <>
+            <Boton texto={guardando ? 'Preparando…' : 'Compartir con foto'} Icono={Megaphone} onPress={compartirConFoto} />
+            <Boton texto="Solo el texto" variante="secundario" onPress={compartirTexto} />
+          </>
+        ) : (
+          <Boton texto="Compartir" Icono={Megaphone} onPress={compartirTexto} />
+        )}
       </Hoja>
 
       <Hoja visible={hoja === 'menu'} titulo="Opciones" onCerrar={cerrar}>

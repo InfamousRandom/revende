@@ -11,6 +11,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { AvisoActualizacion } from '@/components/aviso-actualizacion';
 import { Colors } from '@/constants/theme';
 import { ArticulosProvider } from '@/datos/articulos';
 import { EmparejadoProvider, useEmparejado } from '@/datos/emparejado';
@@ -54,6 +55,7 @@ export default function RootLayout() {
       <EmparejadoProvider>
         <ArticulosProvider>
           <Rutas />
+          <AvisoActualizacion />
         </ArticulosProvider>
       </EmparejadoProvider>
     </ThemeProvider>

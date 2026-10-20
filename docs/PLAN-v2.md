@@ -165,6 +165,14 @@ orden que eligió Pablo:
 - [x] Lote comprado: "Compré el lote" registra cada artículo con su parte de lo pagado (según lo que
       vale cada uno; si falta algún precio, en partes iguales).
 
+## Antes del APK 4 (2026-10-20)
+
+- [x] EAS Update (`expo-updates`, canal `apk`, `runtimeVersion` por fingerprint) y aviso "Versión
+      nueva lista" en la app. Publicar: `npm run actualizar` desde `movil/`.
+- [x] Anuncio con foto: comparte la portada (`expo-sharing`) y copia el texto (`expo-clipboard`).
+- [x] Buscar por voz (`expo-speech-recognition`, es-MX) en los campos de búsqueda. Solo llena el
+      texto; la búsqueda se confirma con la lupa. Necesita el permiso de micrófono.
+
 ## Fase V9: versión web
 
 - [ ] Esperar a que la app nativa esté estable (acordado con Pablo).

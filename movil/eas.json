@@ -12,14 +12,16 @@
       "env": {
         "EXPO_PUBLIC_API_URL": "https://revende.molinapablo990.workers.dev"
       },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "apk"
     },
     "development": {
       "developmentClient": true,
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "development"
     }
   }
 }
