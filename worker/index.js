@@ -3,6 +3,7 @@ import { DurableObject } from 'cloudflare:workers';
 import { ENCABEZADO_DISPOSITIVO, json, normalizar, verificarAcceso } from './util.js';
 import { catalogo, codigoDeBarras } from './catalogo.js';
 import { cartas } from './cartas.js';
+import { ebay } from './ebay.js';
 import { historial, esRutaHistorial, productosDelCatalogo } from './historial.js';
 const MODELO_DEFECTO = 'gemini-3-flash-preview';
 
@@ -602,6 +603,7 @@ async function manejar(request, env, url) {
       cache: Boolean(env.CACHE),
       dispositivo: Boolean(env.REVENDE_DISPOSITIVO),
       mercadolibre: Boolean(env.ML_CLIENT_ID && env.ML_CLIENT_SECRET),
+      ebay: Boolean(env.EBAY_CLIENT_ID && env.EBAY_CLIENT_SECRET),
     });
   }
 
@@ -622,12 +624,13 @@ async function manejar(request, env, url) {
   }
 
   // Catálogo de Mercado Libre, código de barras y cartas Pokémon (no gastan SerpApi).
-  if (url.pathname === '/api/catalogo' || url.pathname === '/api/codigo' || url.pathname === '/api/cartas') {
+  if (['/api/catalogo', '/api/codigo', '/api/cartas', '/api/ebay'].includes(url.pathname)) {
     if (request.method !== 'GET') return json({ ok: false, error: 'Usa GET' }, 405);
     const sinPermiso = await verificarAcceso(request, env);
     if (sinPermiso) return sinPermiso;
     try {
       if (url.pathname === '/api/cartas') return await cartas(env, url);
+      if (url.pathname === '/api/ebay') return await ebay(env, url);
       return url.pathname === '/api/catalogo' ? await catalogo(env, url) : await codigoDeBarras(env, url);
     } catch (e) {
       return json({ ok: false, error: 'No se pudo consultar el catálogo. Intenta de nuevo.', detalle: String(e).slice(0, 200) }, 502);

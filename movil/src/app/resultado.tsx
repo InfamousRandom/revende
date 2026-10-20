@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Calculator, ExternalLink, History, Search, X } from 'lucide-react-native';
+import { Calculator, ExternalLink, Globe, History, Search, X } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -263,6 +263,8 @@ function VistaResultado({ r, entrada, extra }: { r: DatosResultado; entrada: Ent
           </View>
         </Tarjeta>
 
+        {r.ebay ? <SeccionEbay ebay={r.ebay} /> : null}
+
         {r.nuevos ? <ListaOfertas titulo="Nuevos" ofertas={r.nuevos.ofertas} /> : null}
         {r.usados ? <ListaOfertas titulo="Usados y reacondicionados" ofertas={r.usados.ofertas} /> : null}
         {r.lens.length ? (
@@ -279,6 +281,57 @@ function VistaResultado({ r, entrada, extra }: { r: DatosResultado; entrada: Ent
         </View>
       </SafeAreaView>
     </SafeAreaView>
+  );
+}
+
+/** Referencia internacional: aparte, abajo, y fuera de la calculadora. */
+function SeccionEbay({ ebay }: { ebay: NonNullable<DatosResultado['ebay']> }) {
+  const theme = useTheme();
+  const [abierta, setAbierta] = useState(false);
+  const visibles = abierta ? ebay.ofertas : ebay.ofertas.slice(0, 4);
+  return (
+    <Tarjeta style={{ gap: Spacing.sm }}>
+      <View style={styles.tituloSeccion}>
+        <Globe size={IconSize.sm} color={theme.textoSecundario} />
+        <ThemedText type="cuerpoFuerte" style={{ flex: 1 }}>
+          Referencia internacional (eBay)
+        </ThemedText>
+      </View>
+      {ebay.rango ? (
+        <>
+          <ThemedText type="subtitulo">{pesos(ebay.rango.mediana)}</ThemedText>
+          <ThemedText type="chico" themeColor="textoTenue">
+            Usados, {pesos(ebay.rango.min)} – {pesos(ebay.rango.max)} · {ebay.total.toLocaleString('es-MX')} publicaciones con envío a México
+          </ThemedText>
+        </>
+      ) : null}
+      {visibles.map((o, i) => (
+        <Pressable
+          key={`${o.link}-${i}`}
+          accessibilityRole="link"
+          accessibilityLabel={`${o.titulo}, ${pesos(o.precio)}${o.aviso ? `, ${o.aviso}` : ''}`}
+          onPress={() => Linking.openURL(o.link)}
+          style={({ pressed }) => [styles.ofertaEbay, { opacity: pressed ? 0.7 : o.aviso ? 0.55 : 1 }]}>
+          {o.imagen ? <Image source={{ uri: o.imagen }} style={styles.imagenEbay} contentFit="cover" /> : null}
+          <View style={{ flex: 1, gap: 2 }}>
+            <ThemedText type="chico" numberOfLines={2}>
+              {o.titulo}
+            </ThemedText>
+            <ThemedText type="etiqueta" themeColor="textoTenue">
+              {[o.dolares ? `${o.dolares} USD` : null, o.pais ? `desde ${o.pais}` : null, o.aviso].filter(Boolean).join(' · ')}
+            </ThemedText>
+          </View>
+          <ThemedText type="cuerpoFuerte">{pesos(o.precio)}</ThemedText>
+        </Pressable>
+      ))}
+      {ebay.ofertas.length > 4 ? (
+        <Boton texto={abierta ? 'Ver menos' : `Ver las ${ebay.ofertas.length}`} variante="secundario" onPress={() => setAbierta((v) => !v)} />
+      ) : null}
+      <ThemedText type="etiqueta" themeColor="textoTenue">
+        Es lo que piden en eBay, no lo que se vendió. Precio en pesos convertido por eBay
+        {ebay.tipoCambio ? ` (≈ $${ebay.tipoCambio} por dólar)` : ''}; no cuenta para la calculadora.
+      </ThemedText>
+    </Tarjeta>
   );
 }
 
@@ -485,6 +538,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     padding: Spacing.md,
     minHeight: TocableMinimo + 16,
+  },
+  ofertaEbay: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    minHeight: TocableMinimo,
+  },
+  imagenEbay: {
+    width: 44,
+    height: 44,
+    borderRadius: Radius.sm,
   },
   tienda: {
     flexDirection: 'row',

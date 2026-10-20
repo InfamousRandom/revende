@@ -53,7 +53,7 @@ producción hasta que la versión web de 2.0 la reemplace.
   queden procesos `wrangler dev`/`workerd` viejos corriendo.
 - Rutas nuevas del Worker (2.0): `/api/emparejar`, `/api/operaciones/:id/fotos`, `/api/fotos/:id`
   (R2 `FOTOS_ARTICULOS`), `/api/catalogo` y `/api/codigo` (`worker/catalogo.js`), `/api/cartas`
-  (`worker/cartas.js`), `/api/insight` y `/api/autenticidad` (IA, ocultas en la app).
+  (`worker/cartas.js`), `/api/ebay` (`worker/ebay.js`, referencia internacional), `/api/insight` y `/api/autenticidad` (IA, ocultas en la app).
 - Para probar la app en local sin el código real: `npx wrangler dev --var REVENDE_DISPOSITIVO:<prueba>`.
   La búsqueda de precios en local sí gasta SerpApi real.
 
@@ -90,6 +90,7 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
 | `SERPAPI_KEY` | Google Shopping y Google Lens vía SerpApi | Configurado |
 | `REVENDE_DISPOSITIVO` | Código para emparejar la app nativa | Configurado |
 | `ML_CLIENT_ID`, `ML_CLIENT_SECRET` | Catálogo de Mercado Libre (app propia de Pablo) | Pendiente en Cloudflare |
+| `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET` | eBay Browse API, keyset Production (cuenta de Pablo) | Pendiente en Cloudflare |
 
 ## Decisiones tomadas (y por qué)
 
@@ -105,6 +106,9 @@ Secretos locales en `.dev.vars` (está en .gitignore). Nunca subirlo.
   precios de nuevo. La búsqueda de publicaciones (`/sites/MLM/search`) responde 403 incluso con token
   de app o de usuario, así que no sirve para precios de usados. Claves: `ML_CLIENT_ID` y
   `ML_CLIENT_SECRET` (en `.dev.vars` en local). Detalle en `docs/PLAN-v2.md`.
+- **eBay:** solo referencia internacional (Browse API, gratis, no gasta SerpApi): usados que piden
+  en eBay con envío a México, en pesos convertidos por eBay. Son precios de publicaciones activas, no
+  ventas; se muestran aparte y nunca alimentan la calculadora. Nada de publicar en eBay.
 - **Facebook Marketplace:** nada automatizado (viola términos). Precios de usado por captura
   manual rápida dentro de la app.
 - **Datos del usuario (historial de ventas, capturas de usado):** en Cloudflare D1 desde el inicio

@@ -269,3 +269,27 @@ export async function revisarAutenticidad(uri: string) {
     body: await bytesDeFoto(uri),
   });
 }
+
+// ---------- eBay (referencia internacional) ----------
+
+export type EbayApi = {
+  total: number;
+  rango: { min: number; mediana: number; max: number } | null;
+  tipoCambio: number | null;
+  ofertas: {
+    titulo: string;
+    precio: number;
+    dolares: number | null;
+    condicion: string;
+    pais: string | null;
+    link: string;
+    imagen: string | null;
+    aviso?: string;
+  }[];
+  fuente: string;
+};
+
+/** Usados en eBay con envío a México, en pesos (convertidos por eBay). Gratis. */
+export function buscarEbay(q: string) {
+  return llamar<EbayApi>(`/api/ebay?q=${encodeURIComponent(q)}`);
+}

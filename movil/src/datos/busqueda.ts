@@ -33,6 +33,8 @@ export type Resultado = {
   mercadoLibre: api.CatalogoApi['precios'];
   lens: api.IdentificacionApi['precios'];
   tusVentas: { rango: Rango & { n: number }; diasMediana: number | null } | null;
+  /** Referencia internacional: no cuenta para la calculadora. */
+  ebay: api.EbayApi | null;
   /** Foto reducida (para guardarla en el artículo si se compra). */
   foto: string | null;
   avisos: string[];
@@ -130,9 +132,10 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
     avanzar(3);
   }
 
-  const [rPrecios, rCatalogo] = await Promise.all([
+  const [rPrecios, rCatalogo, rEbay] = await Promise.all([
     api.buscarPrecios(nombre),
     catalogo ? Promise.resolve(null) : api.buscarCatalogo(nombre),
+    api.buscarEbay(nombre),
   ]);
   if (rCatalogo?.ok) catalogo = rCatalogo.datos;
   if (!rPrecios.ok) avisos.push(rPrecios.error);
@@ -156,6 +159,7 @@ export async function buscar(entrada: Entrada, avanzar: (paso: number) => void =
     mercadoLibre: principal ? (catalogo?.precios ?? null) : null,
     lens,
     tusVentas: ventas ? { rango: ventas, diasMediana: rRef.ok ? (rRef.datos.resumen?.dias_mediana ?? null) : null } : null,
+    ebay: rEbay.ok && rEbay.datos.ofertas.length ? rEbay.datos : null,
     foto,
     avisos,
   };
@@ -182,6 +186,7 @@ export async function buscarEjemplo(entrada: Entrada, avanzar: (paso: number) =>
     mercadoLibre: null,
     lens: [],
     tusVentas: { rango: { n: 2, mediana: 3300, min: 3100, max: 3500 }, diasMediana: 9 },
+    ebay: null,
     foto: entrada.tipo === 'foto' ? entrada.uri : null,
     avisos: [],
   };

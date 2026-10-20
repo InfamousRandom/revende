@@ -152,8 +152,11 @@ Terminado cuando: registrar una compra con foto toma menos de 30 segundos y el h
 
 ## Pendiente externo
 
-- [ ] eBay: cuenta de desarrollador en revisión. Al aprobarla: claves en `.dev.vars` y Cloudflare,
-      ruta de precios de usados como referencia internacional (USD, con tipo de cambio).
+- [x] eBay (2026-10-20): `/api/ebay` (`worker/ebay.js`, Browse API con token de app). Usados de
+      precio fijo con envío a México; eBay convierte a pesos y traduce títulos. Accesorios y precios
+      raros marcados (no cuentan para el rango). En el resultado, sección "Referencia internacional"
+      aparte, sin contar para la calculadora. Requiere la exención de borrado de cuentas (ya aprobada).
+- [ ] Claves `EBAY_CLIENT_ID` y `EBAY_CLIENT_SECRET` en Cloudflare.
 
 ## Pendientes por decidir
 
