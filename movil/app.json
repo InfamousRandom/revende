@@ -54,7 +54,8 @@
           "cameraPermission": "Revende usa la cámara para tomarle foto a los artículos.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "./plugins/con-mlkit.js"
     ],
     "experiments": {
       "typedRoutes": true,
