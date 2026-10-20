@@ -42,7 +42,7 @@ export default function Capturar() {
     setTimeout(() => setAgregado(null), 1200);
   };
 
-  const irAResultado = (params: { foto?: string; codigo?: string }) => router.replace({ pathname: '/resultado', params });
+  const irAResultado = (params: { foto?: string; codigo?: string; extra?: string }) => router.replace({ pathname: '/resultado', params });
 
   const tomarFoto = async () => {
     if (ocupado || !camara.current) return;
@@ -65,9 +65,23 @@ export default function Capturar() {
     }
   };
 
+  // Se pueden elegir varias: con la primera se identifica y el resto se guarda con el artículo.
+  // En modo Lote, cada foto es un artículo distinto.
   const desdeGaleria = async () => {
-    const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!r.canceled && r.assets[0]) irAResultado({ foto: r.assets[0].uri });
+    const r = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+      allowsMultipleSelection: true,
+      selectionLimit: 10,
+    });
+    if (r.canceled || !r.assets.length) return;
+    const uris = r.assets.map((a) => a.uri);
+    if (modo === 'lote') {
+      uris.forEach((uri) => agregarAlLote({ tipo: 'foto', uri }));
+      avisarAgregado(`${uris.length} ${uris.length === 1 ? 'foto agregada' : 'fotos agregadas'} al lote`);
+      return;
+    }
+    irAResultado({ foto: uris[0], extra: uris.length > 1 ? JSON.stringify(uris.slice(1)) : undefined });
   };
 
   const alLeerCodigo = ({ data }: BarcodeScanningResult) => {

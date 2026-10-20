@@ -47,3 +47,11 @@ export function datosDeCarta(lineas: string[]): { nombre: string; numero: string
       .find((l) => /^[A-Za-zÀ-ÿ'’.\- ]{3,30}$/.test(l) && !NO_NOMBRE.test(l)) ?? '';
   return { nombre, numero: numero.replace(/^0+/, '') };
 }
+
+/** Foto lista para guardarla en el artículo: JPEG de hasta 1600 px (o PNG si tiene el fondo quitado). */
+export async function prepararParaGuardar(uri: string, png = false): Promise<string> {
+  const actual = await ImageManipulator.manipulate(uri).renderAsync();
+  const imagen = actual.width > 1600 ? await ImageManipulator.manipulate(uri).resize({ width: 1600 }).renderAsync() : actual;
+  const r = await imagen.saveAsync(png ? { format: SaveFormat.PNG } : { compress: 0.85, format: SaveFormat.JPEG });
+  return r.uri;
+}

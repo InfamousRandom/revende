@@ -10,6 +10,7 @@ import { AvisoEjemplo, Boton, Pildora } from '@/components/ui';
 import { Fonts, IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import * as api from '@/datos/api';
 import { hoy, useArticulos } from '@/datos/articulos';
+import { prepararParaGuardar } from '@/datos/escaneo';
 import { pesos } from '@/datos/formato';
 import { NOMBRE_CONDICION, nombreCategoria, type Condicion, type Producto } from '@/datos/tipos';
 import { useTheme } from '@/hooks/use-theme';
@@ -28,7 +29,7 @@ function ayer(): string {
  * la fecha es hoy y la condición tiene un valor por defecto.
  */
 export default function Registrar() {
-  const params = useLocalSearchParams<{ nombre?: string; marca?: string; categoria?: string; maximo?: string; foto?: string }>();
+  const params = useLocalSearchParams<{ nombre?: string; marca?: string; categoria?: string; maximo?: string; foto?: string; extra?: string }>();
   const { articulos, sonDeEjemplo, registrarCompra, refrescar } = useArticulos();
   const theme = useTheme();
 
@@ -96,8 +97,15 @@ export default function Registrar() {
       return setError(r.error);
     }
     // La foto del escaneo se guarda como portada del artículo (si falla, el artículo ya quedó).
-    if (params.foto && !sonDeEjemplo) {
-      await api.subirFoto(r.datos.id, params.foto, 'image/jpeg');
+    // La primera foto queda de portada; las demás elegidas en la galería van después.
+    if (!sonDeEjemplo && (params.foto || params.extra)) {
+      let extra: string[] = [];
+      try {
+        extra = params.extra ? (JSON.parse(params.extra) as string[]) : [];
+      } catch {}
+      for (const uri of [params.foto, ...extra].filter((u): u is string => Boolean(u))) {
+        await api.subirFoto(r.datos.id, await prepararParaGuardar(uri), 'image/jpeg');
+      }
       await refrescar(r.datos.id);
     }
     setGuardando(false);

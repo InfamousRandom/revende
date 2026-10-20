@@ -11,6 +11,7 @@ import * as api from '@/datos/api';
 import { useArticulos } from '@/datos/articulos';
 import { PUEDE_QUITAR_FONDO, descargarFoto, girar, quitarFondo, recortar } from '@/datos/editor';
 import { useEmparejado } from '@/datos/emparejado';
+import { prepararParaGuardar } from '@/datos/escaneo';
 import { useTheme } from '@/hooks/use-theme';
 
 /**
@@ -73,7 +74,8 @@ export default function Editor() {
     // Sin cambios en una foto guardada: no hay nada que subir.
     if (fotoId != null && indice === 0) return router.back();
     setOcupado('Guardando…');
-    const subida = await api.subirFoto(operacionId, actual, png ? 'image/png' : 'image/jpeg');
+    const lista = await prepararParaGuardar(actual, png);
+    const subida = await api.subirFoto(operacionId, lista, png ? 'image/png' : 'image/jpeg');
     if (!subida.ok) {
       setOcupado(null);
       return setError(subida.error);

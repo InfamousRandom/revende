@@ -16,7 +16,7 @@ import {
   Trash2,
 } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { CampoPesos, Hoja, OpcionMenu } from '@/components/hoja';
@@ -26,6 +26,7 @@ import { IconSize, Radius, Spacing, TocableMinimo } from '@/constants/theme';
 import * as api from '@/datos/api';
 import { hoy, useArticulo, useArticulos } from '@/datos/articulos';
 import { useEmparejado } from '@/datos/emparejado';
+import { prepararParaGuardar } from '@/datos/escaneo';
 import { diasEntre, fechaCorta, pesos, pesosConSigno } from '@/datos/formato';
 import {
   NOMBRE_CANAL,
@@ -53,6 +54,7 @@ export default function FichaArticulo() {
   const [precio, setPrecio] = useState('');
   const [canal, setCanal] = useState<Canal>('en_persona');
   const [fotos, setFotos] = useState<Foto[]>([]);
+  const [subiendo, setSubiendo] = useState(false);
 
   useEffect(() => {
     if (sonDeEjemplo || !articulo) return;
@@ -108,11 +110,31 @@ export default function FichaArticulo() {
         return;
       }
     }
-    const opciones: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.7 };
-    const r = origen === 'camara' ? await ImagePicker.launchCameraAsync(opciones) : await ImagePicker.launchImageLibraryAsync(opciones);
-    if (r.canceled || !r.assets[0]) return;
-    // Antes de guardarla se abre en el editor (recortar, girar, quitar fondo).
-    router.push({ pathname: '/editor', params: { operacion: String(articulo.id), uri: r.assets[0].uri } });
+    const r =
+      origen === 'camara'
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.8 })
+        : await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ['images'],
+            quality: 0.8,
+            allowsMultipleSelection: true,
+            selectionLimit: 10,
+          });
+    if (r.canceled || !r.assets.length) return;
+    // Una foto: se abre en el editor (recortar, girar, quitar fondo). Varias: se guardan todas.
+    if (r.assets.length === 1) {
+      router.push({ pathname: '/editor', params: { operacion: String(articulo.id), uri: r.assets[0].uri } });
+      return;
+    }
+    setSubiendo(true);
+    for (const a of r.assets) {
+      const subida = await api.subirFoto(articulo.id, await prepararParaGuardar(a.uri), 'image/jpeg');
+      if (!subida.ok) {
+        setError(subida.error);
+        break;
+      }
+    }
+    setSubiendo(false);
+    await refrescar(articulo.id);
   };
 
   const accionFoto = async (accion: 'portada' | 'borrar', foto: Foto) => {
@@ -161,9 +183,10 @@ export default function FichaArticulo() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Agregar foto"
+              disabled={subiendo}
               onPress={() => setHoja('agregarFoto')}
               style={[styles.foto, styles.agregarFoto, { borderColor: theme.borde }]}>
-              <ImagePlus size={IconSize.md} color={theme.textoSecundario} />
+              {subiendo ? <ActivityIndicator color={theme.primario} /> : <ImagePlus size={IconSize.md} color={theme.textoSecundario} />}
             </Pressable>
           </ScrollView>
         ) : null}
@@ -316,7 +339,7 @@ export default function FichaArticulo() {
 
       <Hoja visible={hoja === 'agregarFoto'} titulo="Agregar foto" onCerrar={cerrar}>
         <OpcionMenu texto="Tomar foto" Icono={Camera} onPress={() => elegirFoto('camara')} />
-        <OpcionMenu texto="Elegir de la galería" Icono={Images} onPress={() => elegirFoto('galeria')} />
+        <OpcionMenu texto="Elegir de la galería (una o varias)" Icono={Images} onPress={() => elegirFoto('galeria')} />
       </Hoja>
 
       <Hoja visible={typeof hoja === 'object' && hoja !== null} titulo="Foto" onCerrar={cerrar}>

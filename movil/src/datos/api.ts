@@ -2,6 +2,9 @@
  * Llamadas al Worker de Revende. Toda llamada lleva el código del dispositivo en un encabezado;
  * ninguna llave de servicios externos vive en la app.
  */
+import { File } from 'expo-file-system';
+import { Platform } from 'react-native';
+
 import { leerCodigo } from './dispositivo';
 import type { Foto, OperacionApi, Producto } from './tipos';
 
@@ -33,6 +36,23 @@ export async function llamar<T>(ruta: string, opciones: RequestInit = {}, codigo
   } catch {
     return { ok: false, status: 0, error: 'No hay conexión con el servidor. Revisa tu internet.' };
   }
+}
+
+/**
+ * Bytes de una foto local para mandarla tal cual. En Android un Blob de `fetch(uri)` sale sin tipo y
+ * el Worker la rechaza ("Manda una foto"); por eso se leen los bytes del archivo.
+ */
+async function bytesDeFoto(uri: string): Promise<BodyInit> {
+  if (Platform.OS === 'web') return (await fetch(uri)).blob();
+  return new File(uri).arrayBuffer();
+}
+
+/** Tipo de imagen según la extensión del archivo (por defecto JPEG). */
+export function tipoDeFoto(uri: string): string {
+  const u = uri.toLowerCase();
+  if (u.endsWith('.png')) return 'image/png';
+  if (u.endsWith('.webp')) return 'image/webp';
+  return 'image/jpeg';
 }
 
 const conJson = (metodo: string, cuerpo: unknown): RequestInit => ({
@@ -98,12 +118,11 @@ export function listarFotos(operacionId: number) {
   return llamar<{ fotos: Foto[] }>(`/api/operaciones/${operacionId}/fotos`);
 }
 
-export async function subirFoto(operacionId: number, uri: string, tipo: string) {
-  const archivo = await (await fetch(uri)).blob();
+export async function subirFoto(operacionId: number, uri: string, tipo?: string) {
   return llamar<{ foto: Foto }>(`/api/operaciones/${operacionId}/fotos`, {
     method: 'POST',
-    headers: { 'Content-Type': tipo },
-    body: archivo,
+    headers: { 'Content-Type': tipo ?? tipoDeFoto(uri) },
+    body: await bytesDeFoto(uri),
   });
 }
 
@@ -175,11 +194,10 @@ export type IdentificacionApi = {
 
 /** Google Lens vía SerpApi (1 búsqueda). La foto se manda reducida (JPEG). */
 export async function identificarFoto(uri: string) {
-  const archivo = await (await fetch(uri)).blob();
   return llamar<IdentificacionApi>('/api/identificar', {
     method: 'POST',
     headers: { 'Content-Type': 'image/jpeg' },
-    body: archivo,
+    body: await bytesDeFoto(uri),
   });
 }
 
@@ -245,6 +263,9 @@ export type AutenticidadApi = {
 };
 
 export async function revisarAutenticidad(uri: string) {
-  const archivo = await (await fetch(uri)).blob();
-  return llamar<AutenticidadApi>('/api/autenticidad', { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: archivo });
+  return llamar<AutenticidadApi>('/api/autenticidad', {
+    method: 'POST',
+    headers: { 'Content-Type': 'image/jpeg' },
+    body: await bytesDeFoto(uri),
+  });
 }

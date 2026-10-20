@@ -25,23 +25,23 @@ const VISIBLES = 6;
  * Nunca muestra un precio sin su fuente.
  */
 export default function Resultado() {
-  const p = useLocalSearchParams<{ consulta?: string; codigo?: string; foto?: string }>();
+  const p = useLocalSearchParams<{ consulta?: string; codigo?: string; foto?: string; extra?: string }>();
   const entrada: Entrada = p.consulta
     ? { tipo: 'texto', consulta: p.consulta }
     : p.codigo
       ? { tipo: 'codigo', codigo: p.codigo }
       : { tipo: 'foto', uri: p.foto ?? '' };
   const clave = p.consulta ?? p.codigo ?? p.foto ?? '';
-  return <Flujo key={`${entrada.tipo}:${clave}`} entrada={entrada} />;
+  return <Flujo key={`${entrada.tipo}:${clave}`} entrada={entrada} extra={p.extra} />;
 }
 
-function Flujo({ entrada }: { entrada: Entrada }) {
+function Flujo({ entrada, extra }: { entrada: Entrada; extra?: string }) {
   const { sonDeEjemplo } = useArticulos();
   const { paso, resultado, error } = useBusqueda(entrada, sonDeEjemplo);
 
   if (error) return <Falla error={error} entrada={entrada} />;
   if (!resultado) return <Procesando entrada={entrada} paso={paso} />;
-  return <VistaResultado r={resultado} entrada={entrada} />;
+  return <VistaResultado r={resultado} entrada={entrada} extra={extra} />;
 }
 
 function Procesando({ entrada, paso }: { entrada: Entrada; paso: number }) {
@@ -104,7 +104,7 @@ function BarraSuperior() {
   );
 }
 
-function VistaResultado({ r, entrada }: { r: DatosResultado; entrada: Entrada }) {
+function VistaResultado({ r, entrada, extra }: { r: DatosResultado; entrada: Entrada; extra?: string }) {
   const theme = useTheme();
   const { sonDeEjemplo } = useArticulos();
 
@@ -128,6 +128,7 @@ function VistaResultado({ r, entrada }: { r: DatosResultado; entrada: Entrada })
         marca: r.marca ?? '',
         maximo: String(Math.max(maximo, 0)),
         foto: r.foto ?? '',
+        extra: extra ?? '',
       },
     });
 

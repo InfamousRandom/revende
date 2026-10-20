@@ -11,7 +11,8 @@
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://revende.molinapablo990.workers.dev"
-      }
+      },
+      "autoIncrement": true
     },
     "development": {
       "developmentClient": true,
